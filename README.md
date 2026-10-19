@@ -16,6 +16,6 @@ It works with any login system (identity provider) and any FHIR server, and you 
 
 ## Status
 
-**Pre-code.** The research and decisions so far are in [`docs/`](docs/). Start with [the idea in plain words](docs/00-the-idea-in-plain-words.md).
+**Pre-code.** The plan and decisions are in [`docs/`](docs/). Start with [the plan](docs/PLAN.md).
 
 Demos use synthetic data only.
