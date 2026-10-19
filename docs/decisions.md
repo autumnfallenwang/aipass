@@ -18,8 +18,8 @@ This page records **what has actually been decided**. Recommendations from the r
 
 | # | Proposal | Source |
 |---|---|---|
-| P1 | Ship as **open-source, self-hosted** software for developers and health-data platforms, **not** as a hosted consumer app. Never hold patient data | [round 2](03-research-round2-standalone-plan.md) §2.4, §3 |
-| P2 | Use **SMART Permission Tickets** as the permission format rather than inventing one | round 2 §2.1 |
+| P1 | Ship as **open-source, self-hosted** software for developers and health-data platforms, **not** as a hosted consumer app. Never hold patient data | research |
+| P2 | Use **SMART Permission Tickets** as the permission format rather than inventing one | research |
 | P3 | Identity checks (wrong patient, replay, self-approval, …) ship as a public **test suite** alongside the gateway | PLAN S4 |
 | P4 | Dates: v0.1 public by **2026-11-12**; at least one external fix or design partner by **2026-12-31** | PLAN §6 |
 

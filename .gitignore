@@ -3,3 +3,7 @@ node_modules/
 .env.*
 *.log
 .DS_Store
+
+# local only, never pushed
+docs/research/
+poc/
