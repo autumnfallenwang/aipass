@@ -6,4 +6,3 @@ node_modules/
 
 # local only, never pushed
 docs/research/
-poc/

@@ -56,7 +56,6 @@ aipass/
   fixtures/         synthetic patients only (Maria + a few Synthea patients)
   deploy/compose.yaml   Postgres + HAPI FHIR (+ Keycloak in S6)
   docs/             plan, decisions, the idea (docs/research/ is local-only, git-ignored)
-  poc/              spikes and throwaway proofs of concept (local-only, git-ignored)
 ```
 
 **Stack:**
