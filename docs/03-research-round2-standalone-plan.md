@@ -20,7 +20,7 @@
 | Product (working name) | What we do, for a non-technical person | What we solved |
 |---|---|---|
 | **Slip Gateway** (the core) | "We put a gatekeeper between AI assistants and medical records: the AI only sees what you allowed, can't change anything without your OK, and leaves a receipt every time." | Giving an AI your health data used to be all-or-nothing and invisible. Now it's specific, visible, and you can take it back instantly. |
-| **Slip Pass** (the badge issuer) | "Every AI gets a visitor badge that says which AI it is, who sent it, and what it may do, and the badge expires in minutes." | AI tools used to borrow a master key. Now each carries its own short-lived, named pass. |
+| **Slip Pass** (the badge issuer) | "Every AI gets a visitor badge that says which AI it is, who sent it, and what it may do, and the badge expires in minutes." | AI tools used to share one master key. Now each carries its own short-lived, named pass. |
 | **Slip Receipts** | "Every time an AI looks at or touches a record, one plain sentence says which AI, for whom, what, and whether it was allowed, and it's written into the medical record's own audit log." | Hospitals and patients can finally answer "which AI did this, and on whose behalf?" |
 | **Slip Check** (the inspector) | "We test AI health apps like a building inspector: can the AI see the wrong patient, reuse an old approval, or approve itself? Then we publish the grade." | Nobody has to take "it's secure" on trust any more. |
 
@@ -144,15 +144,6 @@ agent (Claude / any MCP client, identified by CIMD + DPoP)
    any FHIR server (HAPI+Synthea → Epic sandbox → your own records)
 ```
 
-**What carries over from the Ping research (nothing is wasted):**
-
-| Ping finding | Standalone design rule |
-|---|---|
-| R3: unknown permission `type` silently widened the grant | Our STS **fails closed** on any unknown rule field |
-| R5: revoking issuance left live tokens working for an hour | Gateway reads the slip live, so revocation hits the next call |
-| R6: "attributable at issuance, blind at use" | Receipts at the point of use, in FHIR's own audit model |
-| R7: revocation needs two levers | Revoke kills both the slip and the upstream vault token |
-| idjag-check v0.1, `agentctl scan` | Become **Slip Check** |
 
 ---
 
@@ -189,7 +180,7 @@ Today is Thu 2026-10-15. **Kill rule:** v0.1 must be public within 4 weeks (by *
 2. **Lead with read or with write?** Write approval is the most unclaimed slice but is real only in business-to-business settings. Read is easy to reach but more crowded.
 3. **Adopt SMART Permission Tickets as the slip format from day one?** *Recommended: yes.*
 4. **Language and runtime.**
-   - TypeScript: node-oidc-provider + the MCP TS SDK + reuse of idjag-lab's `jose` verifier. *My lean for v0.1.*
+   - TypeScript: node-oidc-provider + the MCP TS SDK + `jose`. *My lean for v0.1.*
    - Go: a single binary (zitadel/oidc + cedar-go + go-webauthn), better for "docker run anywhere".
 5. **Name.** "Permission Slip" is taken. Directions: a badge or pass metaphor, a receipt or countersign metaphor, or a health-specific coinage. *Avoid the overused "X for agents", "valet key" and "guardrails".*
 6. **Licence and posture.** Fully open source (Apache-2.0) to earn trust and standards credibility, or open core (paid hosted approvals and receipts later)?

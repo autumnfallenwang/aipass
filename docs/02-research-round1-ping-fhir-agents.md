@@ -6,7 +6,7 @@
 | | |
 |---|---|
 | **Date** | 2026-10-15 |
-| **Question** | Can we combine our PAIC/Ping agent-delegation work with FHIR and MCP, borrowing ideas from HealthClaw rather than its code? |
+| **Question** | Can we combine our PAIC/Ping agent-delegation work with FHIR and MCP? |
 | **Inputs** | [`01-healthclaw-evaluation.md`](01-healthclaw-evaluation.md) · the HealthClaw repo (the tested commit and upstream `main`) · our earlier Ping lab rounds (private notes, not published) · live read-only probes · web research on standards, regulation and vendors |
 | **Labels** | **[V]** primary source checked · **[S]** secondary or snippet only · **[I]** inference · **[local]** measured on this machine today |
 
@@ -95,13 +95,6 @@ Status of the report's findings on `main`, from a **static read only, not re-run
   - #891 (tenant-wide reads)
 - **Author:** Eugene Vestel (FHIR IQ). 31 stars, 67 open issues; the project is very active.
 
-### 2.4 Ideas worth taking (not code)
-1. **Guardrails you can grade** (A–F, runnable as a script, an endpoint, an MCP tool, or in CI).
-2. **Propose → commit split** for writes. The agent can propose but never approve.
-3. **The H1–H6 out-of-band test** as acceptance criteria for any approval we build.
-4. **Payload-digest binding of approvals** (cf. RFC 9396 `authorization_details`).
-5. **Deterministic engines decide and the LLM explains.** This is not identity, but it shapes which tools are safe to expose.
-6. **Provenance on every patient-approved change** (Curatr).
 
 ---
 
