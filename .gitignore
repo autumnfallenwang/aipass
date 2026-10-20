@@ -16,3 +16,5 @@ playwright-report/
 # local only, never pushed
 docs/research/
 next-env.d.ts
+.playwright-mcp/
+.next-e2e/

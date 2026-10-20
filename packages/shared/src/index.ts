@@ -140,3 +140,38 @@ export function agentUrl(gatewayUrl: string, agentId: string): string {
 export function agentDeviceId(agentId: string): string {
   return `aipass-agent-${agentId}`;
 }
+
+/** Titles the admin UI shows for each group. */
+export const GROUP_TITLES: Record<Group, string> = {
+  labs: "Lab results",
+  vitals: "Vital signs",
+  medications: "Medications",
+  conditions: "Conditions",
+  appointments: "Appointments",
+  demographics: "Patient details",
+  notes: "Visit notes",
+};
+
+export const ACTION_TITLES: Record<Action, string> = {
+  read: "See",
+  propose: "Propose",
+  write: "Change",
+};
+
+export const PATIENT_FIELD_TITLES: Record<PatientField, string> = {
+  name: "Name",
+  phone: "Phone",
+  email: "Email",
+  birthDate: "Birth date",
+  gender: "Gender",
+  address: "Address",
+  identifier: "Medical record number",
+  maritalStatus: "Marital status",
+};
+
+export const LOCKED_LABEL_TITLES: Record<LockedLabel["kind"], string> = {
+  "mental-health": "Mental health",
+  "substance-use": "Substance use",
+  hiv: "HIV",
+  restricted: "Restricted",
+};

@@ -1,11 +1,11 @@
-import { agents, type Db } from "@aipass/db";
+import { agents, type Db, roles } from "@aipass/db";
 import { FhirClient, receiptSentence } from "@aipass/fhir";
-import { agentUrl, type PassClaims } from "@aipass/shared";
+import { agentUrl, GROUPS, type PassClaims, rulesToPermissions } from "@aipass/shared";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { GatewayConfig } from "./config.ts";
-import { Guard } from "./guard.ts";
+import { type Caller, Guard, type RoleOverride } from "./guard.ts";
 import { PassVerifier } from "./pass.ts";
 import { Recorder } from "./recorder.ts";
 import { buildServer } from "./tools.ts";
@@ -56,6 +56,55 @@ export function createGateway(deps: GatewayDeps) {
       bearer_methods_supported: ["header"],
       scopes_supported: ["openid", "offline_access"],
     });
+  });
+
+  // "Preview as this role": the api asks, signed with its own key; the same
+  // guard runs every group in preview mode (receipts marked preview).
+  app.post("/internal/preview", async (c) => {
+    const v = await verifier.verifyPreview(c.req.header("authorization"), config.apiUrl);
+    if (!v.ok) return c.json({ error: "invalid_token", error_description: v.error }, 401);
+    const p = v.claims.preview;
+    let agentId: string;
+    let override: RoleOverride | undefined;
+    if ("roleId" in p) {
+      const [role] = await db.select().from(roles).where(eq(roles.id, p.roleId));
+      if (!role) return c.json({ error: "no such role" }, 404);
+      agentId = `preview-${role.id}`;
+      override = {
+        agent: { id: agentId, name: `${role.name} (preview)` },
+        role: {
+          name: role.name,
+          permissions: rulesToPermissions(role.rules),
+          patientFields: role.patientFields,
+        },
+      };
+    } else {
+      if (!(await findAgent(db, p.agentId))) return c.json({ error: "no such agent" }, 404);
+      agentId = p.agentId;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const caller: Caller = {
+      agentId,
+      mode: "preview",
+      claims: {
+        iss: v.claims.iss,
+        sub: p.personId,
+        aud: `${config.gatewayUrl}/internal/preview`,
+        iat: now,
+        exp: now + 60,
+        jti: v.claims.jti,
+        act: { sub: agentId },
+      },
+    };
+    const groups = await Promise.all(
+      GROUPS.map(async (group) => {
+        const o = await guard.read(caller, { tool: "preview", group, limit: 20 }, override);
+        return o.decision === "allow"
+          ? { group, decision: "allow" as const, records: o.records, withheld: o.withheld }
+          : { group, decision: "refuse" as const, rule: o.rule, reason: o.reason };
+      }),
+    );
+    return c.json({ agentId, personId: p.personId, groups });
   });
 
   app.all("/agents/:agentId/mcp", async (c) => {

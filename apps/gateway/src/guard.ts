@@ -13,7 +13,7 @@ import {
   simplify,
 } from "@aipass/fhir";
 import { decideRequest, decideResource, type Refuse, refuse, type Verdict } from "@aipass/policy";
-import type { Group, PassClaims } from "@aipass/shared";
+import type { Group, PassClaims, PatientField, Permission } from "@aipass/shared";
 import type { GatewayConfig } from "./config.ts";
 import { openPage, sealPage } from "./paging.ts";
 import { AuditWriteFailed, type Recorder } from "./recorder.ts";
@@ -35,6 +35,17 @@ export type ReadRequest = {
 };
 
 export type Withheld = { count: number; reasons: string[] };
+
+/**
+ * Preview of a role: the admin sees a person's chart as an agent with that
+ * role would, assuming the person agreed to everything the role allows.
+ * Everything after the lookup (fetch, filter, mask, receipt) is the same code
+ * an agent's call runs.
+ */
+export type RoleOverride = {
+  agent: { id: string; name: string };
+  role: { name: string; permissions: Permission[]; patientFields: PatientField[] };
+};
 
 export type ReadOutcome =
   | {
@@ -61,8 +72,48 @@ export class Guard {
   ) {}
 
   /** Loads agent, role, person and grant live, and pins the patient. */
-  private async resolve(caller: Caller): Promise<Resolved & { pin: Verdict }> {
-    const ctx = await loadCallContext(this.deps.db, caller.agentId, caller.claims.sub);
+  private async resolve(
+    caller: Caller,
+    override?: RoleOverride,
+  ): Promise<Resolved & { pin: Verdict }> {
+    const loaded = await loadCallContext(this.deps.db, caller.agentId, caller.claims.sub);
+    const ctx: CallContext = override
+      ? {
+          ...loaded,
+          agent: {
+            ...override.agent,
+            status: "active",
+            description: null,
+            roleId: "",
+            fhirDeviceId: null,
+            createdBy: null,
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+          },
+          role: {
+            id: "",
+            name: override.role.name,
+            description: null,
+            rules: [],
+            permissions: override.role.permissions,
+            patientFields: override.role.patientFields,
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+          },
+          grant: loaded.person
+            ? {
+                id: "",
+                personId: loaded.person.id,
+                agentId: override.agent.id,
+                permissions: override.role.permissions,
+                status: "active",
+                grantedAt: new Date(0),
+                revokedAt: null,
+                updatedAt: new Date(0),
+              }
+            : null,
+        }
+      : loaded;
     const person = ctx.person
       ? { id: ctx.person.id, name: ctx.person.displayName, ref: ctx.person.fhirRef }
       : null;
@@ -86,8 +137,10 @@ export class Guard {
     return { ctx, agentName: ctx.agent?.name ?? caller.agentId, person, patientRef, pin };
   }
 
-  async read(caller: Caller, req: ReadRequest): Promise<ReadOutcome> {
-    const r = await this.resolve(caller);
+  async read(caller: Caller, req: ReadRequest, override?: RoleOverride): Promise<ReadOutcome> {
+    if (override && caller.mode !== "preview")
+      throw new Error("role overrides are for previews only");
+    const r = await this.resolve(caller, override);
     const { ctx } = r;
     let verdict = decideRequest({
       pass: { ok: true },

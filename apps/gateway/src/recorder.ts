@@ -45,26 +45,29 @@ export class Recorder {
   async record(r: ReceiptInput, opts: { requireAudit?: boolean } = {}): Promise<Recorded> {
     const receiptId = newId("rcpt");
     let auditEventId: string | null = null;
-    try {
-      const ae = await this.fhir.create(
-        buildAuditEvent({
-          recorded: new Date().toISOString(),
-          agent: r.agent,
-          person: r.person ? { ref: r.person.ref, name: r.person.name } : null,
-          patientRef: r.patientRef,
-          interaction: r.interaction,
-          query: r.query,
-          outcome: r.decision,
-          sentence: r.sentence,
-          passJti: r.passJti,
-          receiptId,
-          targets: r.targets,
-        }),
-      );
-      auditEventId = ae.id ?? null;
-    } catch (err) {
-      console.error(`AuditEvent write failed for ${receiptId}: ${(err as Error).message}`);
-      if (opts.requireAudit) throw new AuditWriteFailed((err as Error).message);
+    // A preview is the admin looking, not an agent acting: receipt only.
+    if (r.mode === "live") {
+      try {
+        const ae = await this.fhir.create(
+          buildAuditEvent({
+            recorded: new Date().toISOString(),
+            agent: r.agent,
+            person: r.person ? { ref: r.person.ref, name: r.person.name } : null,
+            patientRef: r.patientRef,
+            interaction: r.interaction,
+            query: r.query,
+            outcome: r.decision,
+            sentence: r.sentence,
+            passJti: r.passJti,
+            receiptId,
+            targets: r.targets,
+          }),
+        );
+        auditEventId = ae.id ?? null;
+      } catch (err) {
+        console.error(`AuditEvent write failed for ${receiptId}: ${(err as Error).message}`);
+        if (opts.requireAudit) throw new AuditWriteFailed((err as Error).message);
+      }
     }
     await appendReceipt(this.db, {
       id: receiptId,

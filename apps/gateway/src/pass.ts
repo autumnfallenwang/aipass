@@ -5,9 +5,25 @@ import {
   PassClaims as PassClaimsSchema,
 } from "@aipass/shared";
 import { createRemoteJWKSet, decodeJwt, errors, type JWTVerifyGetKey, jwtVerify } from "jose";
+import * as z from "zod";
 import type { TrustedIssuer } from "./config.ts";
 
 export type PassResult = { ok: true; claims: PassClaims } | { ok: false; error: string };
+
+/** What the api signs when an admin asks to preview a chart. */
+export const PreviewClaims = z.object({
+  iss: z.string(),
+  sub: z.string(),
+  jti: z.string(),
+  exp: z.number(),
+  iat: z.number(),
+  preview: z.union([
+    z.object({ roleId: z.string().min(1), personId: z.string().min(1) }),
+    z.object({ agentId: z.string().min(1), personId: z.string().min(1) }),
+  ]),
+});
+export type PreviewClaims = z.infer<typeof PreviewClaims>;
+export type PreviewResult = { ok: true; claims: PreviewClaims } | { ok: false; error: string };
 
 const ALLOWED_ALGS = ["ES256", "RS256", "EdDSA", "PS256"];
 const CLOCK_SKEW_SECONDS = 10;
@@ -28,6 +44,32 @@ export class PassVerifier {
   ) {
     for (const i of issuers) {
       this.keySets.set(i.issuer, keySets?.get(i.issuer) ?? createRemoteJWKSet(new URL(i.jwksUri)));
+    }
+  }
+
+  /** A preview request from the api: signed by the api's own key, for the preview endpoint only. */
+  async verifyPreview(
+    authorization: string | undefined,
+    apiIssuer: string,
+  ): Promise<PreviewResult> {
+    const token = authorization?.match(/^Bearer\s+(\S+)$/)?.[1];
+    if (!token) return { ok: false, error: "missing" };
+    const keys = this.keySets.get(apiIssuer);
+    if (!keys) return { ok: false, error: "untrusted issuer" };
+    try {
+      const { payload } = await jwtVerify(token, keys, {
+        issuer: apiIssuer,
+        audience: `${this.gatewayUrl}/internal/preview`,
+        algorithms: ALLOWED_ALGS,
+        clockTolerance: CLOCK_SKEW_SECONDS,
+        maxTokenAge: 120,
+      });
+      const parsed = PreviewClaims.safeParse(payload);
+      return parsed.success
+        ? { ok: true, claims: parsed.data }
+        : { ok: false, error: "missing claims" };
+    } catch {
+      return { ok: false, error: "invalid" };
     }
   }
 

@@ -8,6 +8,13 @@
       "when": 1792460466179,
       "tag": "0000_blue_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792461599850,
+      "tag": "0001_wild_thunderbolt_ross",
+      "breakpoints": true
     }
   ]
 }

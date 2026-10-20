@@ -1,0 +1,412 @@
+import { randomUUID } from "node:crypto";
+import {
+  agents,
+  type Db,
+  grants,
+  newId,
+  persons,
+  receipts,
+  roles,
+  verifyReceiptChain,
+} from "@aipass/db";
+import { buildDevice, type FhirClient } from "@aipass/fhir";
+import {
+  AgentStatus,
+  agentDeviceId,
+  agentUrl,
+  GROUPS,
+  PatientField,
+  Permission,
+  RoleRule,
+  rulesToPermissions,
+} from "@aipass/shared";
+import { and, count, desc, eq, lt, max, type SQL, sql } from "drizzle-orm";
+import { Hono } from "hono";
+import { SignJWT } from "jose";
+import * as z from "zod";
+import type { Auth } from "./auth.ts";
+import { config, passIssuer } from "./config.ts";
+import { activeKey, PASS_ALG } from "./keys.ts";
+
+type AdminEnv = { Variables: { adminId: string } };
+
+/** `Sunrise Coach!` → `sunrise-coach`. */
+export function slugify(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "item"
+  );
+}
+
+async function uniqueId(base: string, taken: (id: string) => Promise<boolean>): Promise<string> {
+  let id = base;
+  for (let n = 2; await taken(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+const RoleBody = z.strictObject({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(500).optional().nullable(),
+  rules: z.array(RoleRule).refine((rs) => new Set(rs.map((r) => r.group)).size === rs.length, {
+    message: "each group appears once",
+  }),
+  patientFields: z.array(PatientField).refine((f) => new Set(f).size === f.length),
+});
+
+const AgentBody = z.strictObject({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(500).optional().nullable(),
+  roleId: z.string().min(1),
+});
+
+const PersonBody = z.strictObject({
+  displayName: z.string().trim().min(1).max(120),
+  fhirRef: z.string().regex(/^(Patient|Practitioner)\/[A-Za-z0-9\-.]{1,64}$/),
+});
+
+const GrantBody = z.strictObject({ permissions: z.array(Permission) });
+
+export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?: typeof fetch }) {
+  const { db, auth, fhir } = deps;
+  const doFetch = deps.fetch ?? fetch;
+  const app = new Hono<AdminEnv>();
+
+  // Every admin route needs a signed-in admin.
+  app.use("*", async (c, next) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) return c.json({ error: "sign in first" }, 401);
+    if ((session.user as { role?: string }).role !== "admin") {
+      return c.json({ error: "admins only" }, 403);
+    }
+    c.set("adminId", session.user.id);
+    await next();
+  });
+
+  // ---------- agents ----------
+
+  async function listAgents() {
+    const rows = await db
+      .select({ agent: agents, roleName: roles.name })
+      .from(agents)
+      .leftJoin(roles, eq(agents.roleId, roles.id))
+      .orderBy(agents.createdAt);
+    const activity = await db
+      .select({ agentId: receipts.agentId, last: max(receipts.ts) })
+      .from(receipts)
+      .where(eq(receipts.mode, "live"))
+      .groupBy(receipts.agentId);
+    const last = new Map(activity.map((a) => [a.agentId, a.last]));
+    return rows.map(({ agent, roleName }) => ({
+      ...agent,
+      roleName,
+      mcpUrl: agentUrl(config.gatewayUrl, agent.id),
+      lastActivity: last.get(agent.id) ?? null,
+    }));
+  }
+
+  app.get("/agents", async (c) => c.json(await listAgents()));
+
+  app.post("/agents", async (c) => {
+    const body = AgentBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
+    const [role] = await db.select().from(roles).where(eq(roles.id, body.data.roleId));
+    if (!role) return c.json({ error: "no such role" }, 400);
+    const id = await uniqueId(slugify(body.data.name), async (x) => {
+      const [hit] = await db.select({ id: agents.id }).from(agents).where(eq(agents.id, x));
+      return Boolean(hit);
+    });
+    const [agent] = await db
+      .insert(agents)
+      .values({
+        id,
+        name: body.data.name,
+        description: body.data.description ?? null,
+        roleId: role.id,
+        status: "active",
+        fhirDeviceId: agentDeviceId(id),
+        createdBy: c.get("adminId"),
+      })
+      .returning();
+    try {
+      // The AI exists in the FHIR record as a Device, so audit events can name it.
+      await fhir.update(
+        buildDevice({
+          id,
+          name: body.data.name,
+          description: body.data.description,
+          status: "active",
+        }),
+      );
+    } catch (err) {
+      await db.delete(agents).where(eq(agents.id, id));
+      return c.json(
+        { error: `couldn't create the agent's FHIR Device: ${(err as Error).message}` },
+        502,
+      );
+    }
+    return c.json({ ...agent, mcpUrl: agentUrl(config.gatewayUrl, id) }, 201);
+  });
+
+  app.patch("/agents/:id", async (c) => {
+    const body = AgentBody.partial().safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
+    if (body.data.roleId) {
+      const [role] = await db.select().from(roles).where(eq(roles.id, body.data.roleId));
+      if (!role) return c.json({ error: "no such role" }, 400);
+    }
+    const [agent] = await db
+      .update(agents)
+      .set(body.data)
+      .where(eq(agents.id, c.req.param("id")))
+      .returning();
+    if (!agent) return c.json({ error: "no such agent" }, 404);
+    return c.json(agent);
+  });
+
+  for (const [verb, status] of [
+    ["stop", "stopped"],
+    ["resume", "active"],
+  ] as const) {
+    app.post(`/agents/:id/${verb}`, async (c) => {
+      const [agent] = await db
+        .update(agents)
+        .set({ status: AgentStatus.parse(status) })
+        .where(eq(agents.id, c.req.param("id")))
+        .returning();
+      if (!agent) return c.json({ error: "no such agent" }, 404);
+      // Best effort: the gateway reads status from the database, so Stop works
+      // even if this FHIR update fails.
+      fhir.update(buildDevice({ ...agent, status })).catch((err: Error) => {
+        console.error(`Device status update failed for ${agent.id}: ${err.message}`);
+      });
+      return c.json(agent);
+    });
+  }
+
+  // ---------- roles ----------
+
+  app.get("/roles", async (c) => {
+    const rows = await db.select().from(roles).orderBy(roles.createdAt);
+    const used = await db
+      .select({ roleId: agents.roleId, n: count() })
+      .from(agents)
+      .groupBy(agents.roleId);
+    const n = new Map(used.map((u) => [u.roleId, u.n]));
+    return c.json(
+      rows.map((r) => ({
+        ...r,
+        permissions: rulesToPermissions(r.rules),
+        agentCount: n.get(r.id) ?? 0,
+      })),
+    );
+  });
+
+  app.get("/roles/:id", async (c) => {
+    const [role] = await db
+      .select()
+      .from(roles)
+      .where(eq(roles.id, c.req.param("id")));
+    if (!role) return c.json({ error: "no such role" }, 404);
+    return c.json({ ...role, permissions: rulesToPermissions(role.rules) });
+  });
+
+  app.post("/roles", async (c) => {
+    const body = RoleBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
+    const id = await uniqueId(slugify(body.data.name), async (x) => {
+      const [hit] = await db.select({ id: roles.id }).from(roles).where(eq(roles.id, x));
+      return Boolean(hit);
+    });
+    const [role] = await db
+      .insert(roles)
+      .values({ id, ...body.data, description: body.data.description ?? null })
+      .returning();
+    return c.json(role, 201);
+  });
+
+  app.put("/roles/:id", async (c) => {
+    const body = RoleBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
+    const [role] = await db
+      .update(roles)
+      .set({ ...body.data, description: body.data.description ?? null })
+      .where(eq(roles.id, c.req.param("id")))
+      .returning();
+    if (!role) return c.json({ error: "no such role" }, 404);
+    return c.json(role);
+  });
+
+  app.delete("/roles/:id", async (c) => {
+    const [used] = await db
+      .select({ n: count() })
+      .from(agents)
+      .where(eq(agents.roleId, c.req.param("id")));
+    if ((used?.n ?? 0) > 0) return c.json({ error: "agents still use this role" }, 409);
+    const gone = await db
+      .delete(roles)
+      .where(eq(roles.id, c.req.param("id")))
+      .returning();
+    return gone.length ? c.body(null, 204) : c.json({ error: "no such role" }, 404);
+  });
+
+  // ---------- people and their grants ----------
+
+  app.get("/persons", async (c) => {
+    const ps = await db.select().from(persons).orderBy(persons.displayName);
+    const gs = await db
+      .select({ grant: grants, agentName: agents.name })
+      .from(grants)
+      .innerJoin(agents, eq(grants.agentId, agents.id));
+    return c.json(
+      ps.map((p) => ({
+        ...p,
+        grants: gs
+          .filter((g) => g.grant.personId === p.id)
+          .map((g) => ({ ...g.grant, agentName: g.agentName })),
+      })),
+    );
+  });
+
+  app.post("/persons", async (c) => {
+    const body = PersonBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
+    const id = await uniqueId(slugify(body.data.displayName), async (x) => {
+      const [hit] = await db.select({ id: persons.id }).from(persons).where(eq(persons.id, x));
+      return Boolean(hit);
+    });
+    const [person] = await db
+      .insert(persons)
+      .values({ id, ...body.data })
+      .returning();
+    return c.json(person, 201);
+  });
+
+  app.put("/persons/:id/grants/:agentId", async (c) => {
+    const body = GrantBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
+    const personId = c.req.param("id");
+    const agentId = c.req.param("agentId");
+    const [grant] = await db
+      .insert(grants)
+      .values({
+        id: newId("grt"),
+        personId,
+        agentId,
+        permissions: body.data.permissions,
+        status: "active",
+      })
+      .onConflictDoUpdate({
+        target: [grants.personId, grants.agentId],
+        set: { permissions: body.data.permissions, status: "active", revokedAt: null },
+      })
+      .returning()
+      .catch(() => []);
+    if (!grant) return c.json({ error: "no such person or agent" }, 404);
+    return c.json(grant);
+  });
+
+  for (const verb of ["revoke", "restore"] as const) {
+    app.post(`/persons/:id/grants/:agentId/${verb}`, async (c) => {
+      const [grant] = await db
+        .update(grants)
+        .set(
+          verb === "revoke"
+            ? { status: "revoked", revokedAt: new Date() }
+            : { status: "active", revokedAt: null },
+        )
+        .where(
+          and(eq(grants.personId, c.req.param("id")), eq(grants.agentId, c.req.param("agentId"))),
+        )
+        .returning();
+      if (!grant) return c.json({ error: "no such grant" }, 404);
+      return c.json(grant);
+    });
+  }
+
+  // ---------- activity ----------
+
+  app.get("/receipts", async (c) => {
+    const q = c.req.query();
+    const where: SQL[] = [];
+    if (q.agent) where.push(eq(receipts.agentId, q.agent));
+    if (q.person) where.push(eq(receipts.personId, q.person));
+    if (q.decision === "allow" || q.decision === "refuse")
+      where.push(eq(receipts.decision, q.decision));
+    if (q.mode !== "all") where.push(eq(receipts.mode, q.mode === "preview" ? "preview" : "live"));
+    if (q.before) where.push(lt(receipts.seq, Number(q.before)));
+    const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
+    const rows = await db
+      .select()
+      .from(receipts)
+      .where(where.length ? and(...where) : sql`true`)
+      .orderBy(desc(receipts.seq))
+      .limit(limit);
+    return c.json({
+      items: rows.map((r) => ({
+        ...r,
+        auditEventUrl: r.auditEventId ? `${config.fhirBaseUrl}/AuditEvent/${r.auditEventId}` : null,
+      })),
+      nextBefore: rows.length === limit ? rows[rows.length - 1]?.seq : null,
+    });
+  });
+
+  app.get("/receipts/verify", async (c) => {
+    const broken = await verifyReceiptChain(db);
+    return c.json({ intact: broken === null, brokenAt: broken });
+  });
+
+  app.get("/overview", async (c) => {
+    const [a] = await db
+      .select({
+        active: sql<number>`count(*) filter (where ${agents.status} = 'active')`.mapWith(Number),
+        stopped: sql<number>`count(*) filter (where ${agents.status} = 'stopped')`.mapWith(Number),
+      })
+      .from(agents);
+    const [r] = await db
+      .select({
+        allowed: sql<number>`count(*) filter (where ${receipts.decision} = 'allow')`.mapWith(
+          Number,
+        ),
+        refused: sql<number>`count(*) filter (where ${receipts.decision} = 'refuse')`.mapWith(
+          Number,
+        ),
+      })
+      .from(receipts)
+      .where(and(eq(receipts.mode, "live"), sql`${receipts.ts} > now() - interval '24 hours'`));
+    const [p] = await db.select({ n: count() }).from(persons);
+    return c.json({ agents: a, last24h: r, persons: p?.n ?? 0, groups: GROUPS });
+  });
+
+  // ---------- preview as this role ----------
+
+  app.post("/preview", async (c) => {
+    const body = z
+      .union([
+        z.strictObject({ roleId: z.string().min(1), personId: z.string().min(1) }),
+        z.strictObject({ agentId: z.string().min(1), personId: z.string().min(1) }),
+      ])
+      .safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "expected {roleId or agentId, personId}" }, 400);
+    const { kid, key } = await activeKey(db);
+    const token = await new SignJWT({ preview: body.data })
+      .setProtectedHeader({ alg: PASS_ALG, kid })
+      .setIssuer(passIssuer())
+      .setSubject(c.get("adminId"))
+      .setAudience(`${config.gatewayUrl}/internal/preview`)
+      .setIssuedAt()
+      .setExpirationTime("60s")
+      .setJti(randomUUID())
+      .sign(key);
+    const res = await doFetch(`${config.gatewayUrl}/internal/preview`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    return c.json(await res.json(), res.status as 200);
+  });
+
+  return app;
+}

@@ -6,6 +6,7 @@ This page records **what has actually been decided**. Recommendations from the r
 
 | # | Date | Decision | Why |
 |---|---|---|---|
+| D10 | 2026-10-19 | **One public origin.** People's browsers only talk to the web app, which passes `/api/*` through to the api. Better Auth's base URL, passkey relying party and (S3) OAuth issuer are all that origin | Cookies and passkeys are bound to an origin. One origin means no cross-site cookies, no CORS, and an issuer URL people can see in their address bar |
 | D9 | 2026-10-19 | **One gateway URL per agent:** `/agents/{agent-id}/mcp`. That URL is the pass's audience and the OAuth `resource` (RFC 8707) | Claude Code uses one shared OAuth client id for every install (SP1), so the client id alone can't say *which* agent is calling. A per-agent audience also stops a pass for one agent being used at another |
 | D8 | 2026-10-19 | **MCP TypeScript SDK v2** (`@modelcontextprotocol/server`), protocol **2026-07-28**, with 2025-11-25 served as a stateless fallback | SP2: v2 is the stable line, implements 2026-07-28, and real Claude Code negotiates it. One server factory serves both protocol versions |
 | D7 | 2026-10-19 | **Simple docs only.** One [`PLAN.md`](PLAN.md) is both the plan and the progress tracker; decisions stay here. No skill, task or milestone system | Fewer files means plan and tracker can't drift apart |

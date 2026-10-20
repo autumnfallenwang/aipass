@@ -242,21 +242,23 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 | **Activity** | Receipts timeline, filterable by agent, person and decision. Each row shows the plain sentence and links to the FHIR AuditEvent |
 
 - **Admin login:** Better Auth with email + passkey. The first user becomes admin.
-- **Preview** runs the real gateway decision path in `preview` mode. It is marked as such in receipts and never counts as agent activity.
+- **One public origin (D10):** the browser only talks to the web app; Next.js passes `/api/*` through to the api. Cookies, passkeys and (S3) the OAuth issuer all live on that one origin.
+- **Preview** runs the real gateway decision path in `preview` mode. The api asks with a 60 s request signed by its own key, for the gateway's `/internal/preview` only. It is marked as such in receipts, writes no AuditEvent, and never counts as agent activity.
 - **Registering an agent** also creates its FHIR `Device`.
 
 **Build:**
-- [ ] api: admin endpoints (CRUD agents/roles/persons/grants, receipts query), preview endpoint
-- [ ] web: the 4 screens (Tailwind + shadcn/ui)
-- [ ] gateway: preview mode
-- [ ] README quickstart: clone → `pnpm dev` → log in → see the Maria demo
+- [x] api: Better Auth (email + password, passkeys; the first account becomes admin), admin endpoints (agents, roles, persons/grants, receipts + chain check), preview endpoint. Admin-only: 401 when signed out, 403 for a person account (`apps/api/test/admin.int.test.ts`)
+- [x] web: the 4 screens (Tailwind + shadcn/ui), login with first-admin setup, "Add a passkey"
+- [x] gateway: preview mode (same `Guard.read`, plus a role override; receipts only)
+- [x] README quickstart: clone → `pnpm dev` → log in → see the Maria demo
 - [ ] Tag `v0.1.0`
 
-**Validate (Playwright end-to-end):**
-- [ ] Admin creates role "Scheduling Assistant" (appointments + name/phone) → preview of Maria shows **only** that
-- [ ] Admin registers an agent with that role → Claude (S1 setup) sees only appointments
-- [ ] Admin clicks **Stop** → Claude's next call is refused. Measure and record the time from click to refusal (prediction: < 1 s)
-- [ ] Activity shows both the allowed and the refused calls, with correct sentences
+**Validate (Playwright end-to-end, `apps/web/e2e/admin.spec.ts`, 5 tests):**
+- [x] Admin creates a role (appointments + name/phone; called "Front Desk" because the seed already has a Scheduling Assistant) → preview of Maria shows **only** that: 2 appointments with the therapy session withheld, name + phone, and the 5 other groups hidden
+- [x] Admin registers an agent with that role → it sees only appointments. Checked by the test's MCP client and by real Claude Code: it listed name, phone and 2 appointments; labs, medications, notes, conditions and vitals were each refused *not in the Front Desk role*
+- [x] Admin clicks **Stop** → the agent's next call is refused. Measured from click to refusal: **49 ms, 89 ms, 38 ms** over three runs (prediction: < 1 s ✅)
+- [x] Activity shows both the allowed and the refused calls, with correct sentences and AuditEvent links; previews are hidden unless asked for; the chain verifies
+- [x] Also: an admin adds a passkey and signs in with it (Chrome virtual authenticator)
 - [ ] **Release check:** someone other than you follows the README to a working demo
 
 ---
@@ -433,7 +435,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 |---|---|---|---|
 | S0 Foundation + spikes | ✅ done | Oct 19 | all 4 spikes answered; SP2 changed the MCP SDK (D8), SP1 led to one URL per agent (D9) |
 | S1 The guard (read-only) | ✅ done | Oct 19 | all validation rows automated; real Claude Code demo run |
-| S2 Admin UI v1 → v0.1 | 🟡 next | Nov 3–12 | public release |
+| S2 Admin UI v1 → v0.1 | 🟡 in progress | Oct 19– | built and validated; release check + tag next |
 | S3 Real login + person's yes → v0.2 | ⬜ | Nov 13–24 | |
 | S4 Health check | ⬜ | Nov 24 – Dec 3 | external scorecards |
 | S5 Approved changes → v0.3 | ⬜ | Dec 3–17 | |
@@ -448,6 +450,7 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-19 | **S2 built.** Stop → refusal measured at 38–89 ms. E2E runs on its own ports (4000–4002), database (`aipass_e2e`) and Next build folder, next to `pnpm dev`. One public origin (D10) |
 | 2026-10-19 | **S1 ✅** 63 unit + 32 integration tests green; real Claude Code demo matches the plan |
 | 2026-10-19 | **Surprise:** Claude Code runs `headersHelper` once per connection and again only after a 401. Measured: with a 5 s pass, the call after expiry got `401 expired`, then a fresh pass (new jti) succeeded. Lowered clock-skew tolerance from 30 s to 10 s, which had let an expired pass through |
 | 2026-10-19 | **Surprise (demo):** asked for A1c, Claude also called `get_patient_summary` and was refused. The coach role now includes demographics, masked to name, birth date and gender |

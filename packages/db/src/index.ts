@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema.ts";
 
+export { authSchema, users } from "./auth.ts";
 export * from "./ids.ts";
 export { runMigrations } from "./migrate.ts";
 export * from "./queries.ts";

@@ -1,12 +1,16 @@
 import { createDb } from "@aipass/db";
+import { FhirClient } from "@aipass/fhir";
 import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { createApp } from "./app.ts";
+import { createAuth } from "./auth.ts";
 import { config } from "./config.ts";
 
 const { db } = createDb(config.databaseUrl);
 const app = createApp({
   db,
+  auth: createAuth(db),
+  fhir: new FhirClient({ baseUrl: config.fhirBaseUrl }),
   remoteAddr: (c) => getConnInfo(c).remote.address,
 });
 

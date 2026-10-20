@@ -10,7 +10,8 @@
     "test": "vitest run --passWithNoTests --exclude '**/*.int.test.ts'",
     "test:integration": "vitest run .int.test --passWithNoTests --no-file-parallelism",
     "seed": "tsx scripts/seed.ts",
-    "pass": "tsx scripts/pass.ts"
+    "pass": "tsx scripts/pass.ts",
+    "auth:generate": "auth generate --config src/auth-cli.ts --output ../../packages/db/src/auth-schema.ts -y"
   },
   "dependencies": {
     "@aipass/shared": "workspace:*",
@@ -20,6 +21,14 @@
     "@aipass/db": "workspace:*",
     "@aipass/fhir": "workspace:*",
     "jose": "^6.2.12",
-    "drizzle-orm": "^0.45.4"
+    "drizzle-orm": "^0.45.4",
+    "better-auth": "1.7.11",
+    "@better-auth/passkey": "1.7.11",
+    "@better-auth/oauth-provider": "1.7.11",
+    "@better-auth/cimd": "1.7.11"
+  },
+  "devDependencies": {
+    "auth": "1.7.11",
+    "postgres": "^3.4.9"
   }
 }

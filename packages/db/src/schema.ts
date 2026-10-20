@@ -10,6 +10,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { user } from "./auth-schema.ts";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () =>
@@ -56,7 +57,7 @@ export const persons = pgTable(
     /** `Patient/<id>` or `Practitioner/<id>` in the FHIR server. */
     fhirRef: text("fhir_ref").notNull(),
     /** The person's login (S3). */
-    userId: text("user_id"),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("persons_user_id_idx").on(t.userId)],

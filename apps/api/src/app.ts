@@ -1,6 +1,10 @@
-import type { Db } from "@aipass/db";
+import { type Db, users } from "@aipass/db";
+import type { FhirClient } from "@aipass/fhir";
+import { count } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import * as z from "zod";
+import { adminRoutes } from "./admin.ts";
+import type { Auth } from "./auth.ts";
 import { config } from "./config.ts";
 import { publicJwks } from "./keys.ts";
 import { mintPass, PassError } from "./pass.ts";
@@ -9,8 +13,17 @@ function isLoopback(addr: string | undefined): boolean {
   return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
 }
 
-export function createApp(deps: { db: Db; remoteAddr?: (c: Context) => string | undefined }) {
-  const { db } = deps;
+export type ApiDeps = {
+  db: Db;
+  auth: Auth;
+  fhir: FhirClient;
+  remoteAddr?: (c: Context) => string | undefined;
+  /** How the api reaches the gateway (tests pass the gateway app's fetch). */
+  fetch?: typeof fetch;
+};
+
+export function createApp(deps: ApiDeps) {
+  const { db, auth } = deps;
   const app = new Hono();
 
   app.get("/health", (c) => c.json({ status: "ok", service: "aipass-api" }));
@@ -19,6 +32,24 @@ export function createApp(deps: { db: Db; remoteAddr?: (c: Context) => string | 
     c.header("cache-control", "public, max-age=60");
     return c.json(await publicJwks(db));
   });
+
+  // Better Auth: sign-up, sign-in, sessions, passkeys.
+  app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+  // Whether this install still needs its first (admin) account.
+  app.get("/api/setup", async (c) => {
+    const [row] = await db.select({ n: count() }).from(users);
+    return c.json({ needsAdmin: (row?.n ?? 0) === 0 });
+  });
+
+  app.get("/api/me", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) return c.json({ error: "not signed in" }, 401);
+    const u = session.user as typeof session.user & { role?: string };
+    return c.json({ id: u.id, name: u.name, email: u.email, role: u.role ?? "person" });
+  });
+
+  app.route("/api/admin", adminRoutes({ db, auth, fhir: deps.fhir, fetch: deps.fetch }));
 
   // Dev passes (S1): only when AIPASS_DEV_PASSES=1, and only from this machine.
   app.post("/dev/passes", async (c) => {
