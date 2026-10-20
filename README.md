@@ -12,9 +12,10 @@ Let AI help with your health records, on your terms: it sees only what you allow
 - **Writes a receipt for every request**, refusals included. Each one is a plain-English sentence plus an AuditEvent in the FHIR record's own audit log, naming both the AI and the person.
 - **Stops instantly.** When the admin clicks Stop, the AI's very next call is refused (measured: under 0.1 s).
 - **Lets the person decide.** An AI app signs in with OAuth. The person sees exactly what it asks for, can untick anything, and can revoke it later on their "My AIs" page.
+- **Checks itself, and others.** `pnpm check` tries 12 ways past an agent→FHIR system and grades it, for example the wrong patient, a forged pass, a mental-health record, or an `_include` side door. It is proven by planting each defect in aipass, and has been run against two open-source FHIR MCP servers: [docs/check](docs/check/README.md).
 - *Coming next:* changes that wait for the person's passkey (S5). See the [plan](docs/PLAN.md).
 
-It works with any login system (identity provider) and any FHIR server, and you host it yourself.
+It works with any login system (identity provider) and any FHIR server, and you host it yourself. The project itself is developed and tested on localhost only: it runs no hosted instance, and where you deploy it is up to you.
 
 ## Try it (about 5 minutes)
 
@@ -70,6 +71,7 @@ While `pnpm dev` runs, `pnpm smoke` in a second terminal checks that every servi
 | `packages/policy` | The decision rule, in plain TypeScript with no framework |
 | `packages/fhir` | FHIR helpers: groups, labels, patient compartment, audit records |
 | `packages/db` | Database schema, hash-chained receipts, demo seed |
+| `packages/check` | The health check: probes, target adapters, grades |
 | `fixtures/` | Synthetic patients (Maria, John, two Synthea patients) |
 
 ## Tests
@@ -78,6 +80,7 @@ While `pnpm dev` runs, `pnpm smoke` in a second terminal checks that every servi
 pnpm test               # unit tests
 pnpm test:integration   # gateway and api against Postgres and HAPI (needs `pnpm services:up`)
 pnpm test:e2e           # the admin UI in a real browser, plus an MCP client playing the AI
+pnpm check              # the health check against your running gateway
 ```
 
 ## Status

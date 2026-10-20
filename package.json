@@ -24,7 +24,8 @@
     "db:seed": "tsx apps/api/scripts/seed.ts",
     "pass": "tsx apps/api/scripts/pass.ts",
     "admin": "tsx apps/api/scripts/admin.ts",
-    "test:e2e": "pnpm --filter @aipass/web test:e2e"
+    "test:e2e": "pnpm --filter @aipass/web test:e2e",
+    "check": "tsx packages/check/src/cli.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

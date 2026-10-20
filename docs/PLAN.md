@@ -140,6 +140,7 @@ The **AI agent in FHIR** is a `Device` resource, created when the agent is regis
 5. **Live checks.** Agent status, role and grant are read on every call, so "Stop" works on the next request.
 6. **Write the prediction before running a validation**, and log any surprise in the Log.
 7. **Each stage ends with a demo someone else could re-run** from the README.
+8. **Localhost only (D12).** Everything is developed, demoed and validated on `localhost`. There's no deployment to the owner's servers (no home k3s). Deployment pieces (images, compose, Helm) are built for adopters to run where they choose.
 
 **Testing levels:**
 - Unit (Vitest): `packages/policy`, `packages/fhir`.
@@ -322,13 +323,14 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - **Report:** an A–F grade plus a table per probe, with the target's exact version, the date, and the command to rerun it.
 
 **Build:**
-- [ ] probes + CLI + JSON/Markdown report + admin screen
-- [ ] target adapters: the aipass gateway + at least 2 open-source agent→FHIR projects
+- [x] probes + CLI + JSON/Markdown report + admin screen. 12 probes now (`forged_pass` added to the list above); the 3 approval probes switch on in S5. `pnpm check`, **Admin → Health check**, `packages/check`. Leaks are judged by fixture markers
+- [x] target adapters: the aipass gateway (white-box: signs passes, registers two temporary probe agents, stops/revokes, reads AuditEvents) + a generic MCP→FHIR bridge adapter with presets for `wso2/fhir-mcp-server` and `faulkj/fhirHydrant`
+- [x] planted defects: `AIPASS_BROKEN=<defect>` switches off one check each (12 defects, refused in production) — [docs/check/README.md](check/README.md#proving-the-inspector)
 
 **Validate:**
-- [ ] 100% of planted defects caught; 0 false alarms on the correct gateway
-- [ ] Published scorecards for at least 2 external targets (pinned commit, date, exact command)
-- [ ] At least 1 issue filed with a project where the suite found a gap
+- [x] 100% of planted defects caught (12/12, each by its own probe and no other); 0 false alarms on the correct gateway (12/12 pass, grade A). Automated in `packages/check/test/planted.int.test.ts`
+- [x] Published scorecards for at least 2 external targets (pinned commit, date, exact command): [wso2/fhir-mcp-server `2a915a4`](check/scorecards/wso2-fhir-mcp-server.md) **F**, [faulkj/fhirHydrant `1a24376`](check/scorecards/fhirhydrant.md) **F**, and [aipass](check/scorecards/aipass.md) **A**. Each card states the mode tested and what it does *not* judge (both projects document these as local/unauthenticated modes)
+- [ ] ⏸ **At least 1 issue filed: waiting for the owner.** Two feature-request drafts are ready (label withholding for wso2; caller identity in audit events for fhirHydrant). Filing them posts under the owner's name on other people's projects, so the owner decides
 
 ---
 
@@ -404,11 +406,11 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 
 **Build and validate:**
 - [ ] Threat model doc; OWASP ASVS L2 self-check; dependency audit; signed releases (GitHub provenance)
-- [ ] Docker images + `docker compose up` from a clean machine in < 10 min (time it)
+- [ ] Docker images + `docker compose up` from a clean machine in < 10 min (time it). Validated on localhost; nothing is deployed (D12)
 - [ ] Optional, evidence-driven:
   - SMART **Permission Tickets** as the grant format
   - **Cedar**, if the rules have outgrown plain TypeScript
-  - a Helm chart for Kubernetes deploys
+  - a Helm chart for adopters' Kubernetes deploys (built and linted only, not deployed: D12)
 - [ ] Write-up: "Who did this, for whom? Identity for AI agents on FHIR", with S4 scorecards
 - [ ] Tag `v1.0.0`
 
@@ -438,8 +440,8 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 | S1 The guard (read-only) | ✅ done | Oct 19 | all validation rows automated; real Claude Code demo run |
 | S2 Admin UI v1 → v0.1 | ✅ done | Oct 19 | v0.1.0 tagged; release check by an independent agent (a person's run still wanted) |
 | S3 Real login + person's yes → v0.2 | ✅ done | Oct 19 | real Claude Code over OAuth; v0.2.0 |
-| S4 Health check | 🟡 next | Nov 24 – Dec 3 | external scorecards |
-| S5 Approved changes → v0.3 | ⬜ | Dec 3–17 | |
+| S4 Health check | ✅ done | Oct 19 | 12/12 planted defects caught; 2 external scorecards; filing issues waits for the owner |
+| S5 Approved changes → v0.3 | 🟡 next | Dec 3–17 | |
 | S6 Any environment → v0.4 | ⬜ | Dec 17 – Jan 14 | |
 | S7 Hardening → v1.0 | ⬜ | Jan 14 – Feb | |
 
@@ -451,6 +453,8 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-19 | **D12:** develop and test on localhost only; no deployment to the owner's k3s. Deployment artifacts are for adopters |
+| 2026-10-19 | **S4 ✅** The inspector catches all 12 planted defects one-to-one and raises no false alarms. Scorecards: aipass A, wso2/fhir-mcp-server F, fhirHydrant F (in their documented local modes). Issue drafts are ready; filing waits for the owner. the-momentum/fhir-mcp-server was set aside: it needs Pinecone, a LOINC account and an embedding model to run |
 | 2026-10-19 | **S3 ✅ v0.2.0.** Real Claude Code connected with only the gateway URL (CIMD + PKCE + `resource`), Maria consented without vitals, and the gateway refused vitals with her reason. Revoking on "My AIs" ended the session. 13 e2e tests green |
 | 2026-10-19 | **Prediction miss (S3):** DPoP isn't needed against cross-agent replay; the per-agent audience handles it. Claude Code doesn't use DPoP |
 | 2026-10-19 | **Surprise:** a CIMD client exists in Better Auth only after its first visit, so the admin's "allow this app" can't be a foreign key up front. aipass keeps its own list and links on Better Auth's `onClientCreated` (D11). Also: Turbopack dev went into an "HMR hash mismatch" reload loop after many file changes; a clean `.next` fixed it |

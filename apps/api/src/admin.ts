@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { aipassTarget, runChecks } from "@aipass/check";
 import {
   agentClients,
   agents,
@@ -477,6 +478,30 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
       .where(and(eq(receipts.mode, "live"), sql`${receipts.ts} > now() - interval '24 hours'`));
     const [p] = await db.select({ n: count() }).from(persons);
     return c.json({ agents: a, last24h: r, persons: p?.n ?? 0, groups: GROUPS });
+  });
+
+  // ---------- health check (S4) ----------
+
+  let checking = false;
+  app.post("/check", async (c) => {
+    if (checking) return c.json({ error: "a health check is already running" }, 409);
+    checking = true;
+    try {
+      await activeKey(db); // the probes sign passes with the api's own key
+      const report = await runChecks(
+        aipassTarget({
+          db,
+          gatewayUrl: config.gatewayUrl,
+          passIssuer: passIssuer(),
+          fhirBaseUrl: config.fhirBaseUrl,
+          version: process.env.npm_package_version ?? "dev",
+        }),
+        { command: "pnpm check" },
+      );
+      return c.json(report);
+    } finally {
+      checking = false;
+    }
   });
 
   // ---------- preview as this role ----------

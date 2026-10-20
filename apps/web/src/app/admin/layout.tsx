@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Bot, KeyRound, LogOut, ShieldCheck, Users } from "lucide-react";
+import { Activity, Bot, HeartPulse, KeyRound, LogOut, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
@@ -15,6 +15,7 @@ const NAV = [
   { href: "/admin/roles", label: "Roles", icon: ShieldCheck },
   { href: "/admin/people", label: "People", icon: Users },
   { href: "/admin/activity", label: "Activity", icon: Activity },
+  { href: "/admin/health", label: "Health check", icon: HeartPulse },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

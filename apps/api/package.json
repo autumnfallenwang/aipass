@@ -25,7 +25,8 @@
     "better-auth": "1.7.11",
     "@better-auth/passkey": "1.7.11",
     "@better-auth/oauth-provider": "1.7.11",
-    "@better-auth/cimd": "1.7.11"
+    "@better-auth/cimd": "1.7.11",
+    "@aipass/check": "workspace:*"
   },
   "devDependencies": {
     "auth": "1.7.11",

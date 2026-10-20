@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod";
+import type { Defect } from "./broken.ts";
 import type { Caller, Guard, ReadOutcome, ReadRequest } from "./guard.ts";
 
 const INSTRUCTIONS = `You are connected to a patient's health record through aipass.
@@ -58,7 +59,23 @@ function toResult(o: ReadOutcome): ToolResult {
  * One MCP server per request, bound to the verified caller. The tools take
  * structured arguments only: no raw FHIR query string ever reaches the server.
  */
-export function buildServer(guard: Guard, caller: Caller): McpServer {
+export function buildServer(
+  guard: Guard,
+  caller: Caller,
+  broken: ReadonlySet<Defect> = new Set(),
+): McpServer {
+  // Planted defect "include" (S4 self-test only): unknown arguments are let
+  // through, and `_include`/`_revinclude` are passed on to FHIR.
+  const object = broken.has("include") ? z.looseObject : z.strictObject;
+  const includes = (args: Record<string, unknown>): Record<string, string> =>
+    broken.has("include")
+      ? Object.fromEntries(
+          Object.entries(args).filter(
+            (e): e is [string, string] =>
+              (e[0] === "_include" || e[0] === "_revinclude") && typeof e[1] === "string",
+          ),
+        )
+      : {};
   const server = new McpServer(
     { name: "aipass-gateway", version: "0.1.0" },
     { instructions: INSTRUCTIONS, capabilities: { tools: {} } },
@@ -72,7 +89,7 @@ export function buildServer(guard: Guard, caller: Caller): McpServer {
       title: "Patient summary",
       description:
         "The patient's details (name, contact, birth date…), limited to what this AI may see.",
-      inputSchema: z.strictObject({}),
+      inputSchema: object({}),
       annotations: readOnly,
     },
     () => run({ tool: "get_patient_summary", group: "demographics" }),
@@ -83,14 +100,15 @@ export function buildServer(guard: Guard, caller: Caller): McpServer {
     {
       title: "Lab results",
       description: "The patient's lab results, newest first. Filter by LOINC code or by date.",
-      inputSchema: z.strictObject({ code: loinc, since: date, limit, next_page: page }),
+      inputSchema: object({ code: loinc, since: date, limit, next_page: page }),
       annotations: readOnly,
     },
-    ({ code, since, limit: n, next_page }) =>
+    ({ code, since, limit: n, next_page, ...rest }) =>
       run({
         tool: "search_labs",
         group: "labs",
         params: {
+          ...includes(rest),
           _sort: "-date",
           ...(code ? { code: `http://loinc.org|${code}` } : {}),
           ...(since ? { date: `ge${since}` } : {}),
@@ -105,14 +123,15 @@ export function buildServer(guard: Guard, caller: Caller): McpServer {
     {
       title: "Vital signs",
       description: "The patient's vital signs (blood pressure, weight…), newest first.",
-      inputSchema: z.strictObject({ code: loinc, since: date, limit, next_page: page }),
+      inputSchema: object({ code: loinc, since: date, limit, next_page: page }),
       annotations: readOnly,
     },
-    ({ code, since, limit: n, next_page }) =>
+    ({ code, since, limit: n, next_page, ...rest }) =>
       run({
         tool: "search_vitals",
         group: "vitals",
         params: {
+          ...includes(rest),
           _sort: "-date",
           ...(code ? { code: `http://loinc.org|${code}` } : {}),
           ...(since ? { date: `ge${since}` } : {}),
@@ -127,7 +146,7 @@ export function buildServer(guard: Guard, caller: Caller): McpServer {
     {
       title: "Medications",
       description: "The patient's medications.",
-      inputSchema: z.strictObject({
+      inputSchema: object({
         status: z.enum(["active", "completed", "stopped", "on-hold"]).optional(),
         limit,
         next_page: page,
@@ -149,7 +168,7 @@ export function buildServer(guard: Guard, caller: Caller): McpServer {
     {
       title: "Conditions",
       description: "The patient's conditions (problem list).",
-      inputSchema: z.strictObject({
+      inputSchema: object({
         status: z.enum(["active", "resolved", "inactive", "remission"]).optional(),
         limit,
         next_page: page,
@@ -171,7 +190,7 @@ export function buildServer(guard: Guard, caller: Caller): McpServer {
     {
       title: "Appointments",
       description: "The patient's appointments, soonest first.",
-      inputSchema: z.strictObject({
+      inputSchema: object({
         from: date.describe("Only appointments on or after this date"),
         limit,
         next_page: page,
@@ -193,7 +212,7 @@ export function buildServer(guard: Guard, caller: Caller): McpServer {
     {
       title: "Visit notes",
       description: "The patient's visit notes, newest first. Pass an id to read one note.",
-      inputSchema: z.strictObject({
+      inputSchema: object({
         id: fhirId.optional().describe("A DocumentReference id"),
         limit,
         next_page: page,

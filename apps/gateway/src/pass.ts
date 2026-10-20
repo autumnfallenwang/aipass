@@ -4,8 +4,16 @@ import {
   type PassClaims,
   PassClaims as PassClaimsSchema,
 } from "@aipass/shared";
-import { createRemoteJWKSet, decodeJwt, errors, type JWTVerifyGetKey, jwtVerify } from "jose";
+import {
+  createRemoteJWKSet,
+  decodeJwt,
+  errors,
+  type JWTPayload,
+  type JWTVerifyGetKey,
+  jwtVerify,
+} from "jose";
 import * as z from "zod";
+import type { Defect } from "./broken.ts";
 import type { TrustedIssuer } from "./config.ts";
 
 /** `clientId` is the OAuth client that holds the pass (OAuth passes only). */
@@ -44,6 +52,8 @@ export class PassVerifier {
     issuers: TrustedIssuer[],
     /** Tests inject local key sets here. */
     keySets?: Map<string, JWTVerifyGetKey>,
+    /** Planted defects (S4 self-test only). */
+    private readonly broken: ReadonlySet<Defect> = new Set(),
   ) {
     for (const i of issuers) {
       this.keySets.set(i.issuer, keySets?.get(i.issuer) ?? createRemoteJWKSet(new URL(i.jwksUri)));
@@ -77,48 +87,95 @@ export class PassVerifier {
   }
 
   async verify(authorization: string | undefined, agentId: string): Promise<PassResult> {
-    if (!authorization) return { ok: false, error: "missing" };
+    const audience = agentUrl(this.gatewayUrl, agentId);
+    if (!authorization) {
+      if (this.broken.has("require_pass")) return this.plantedDefaultPass(agentId, audience);
+      return { ok: false, error: "missing" };
+    }
     const m = authorization.match(/^Bearer\s+([A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$/);
     if (!m?.[1]) return { ok: false, error: "malformed" };
     const token = m[1];
 
-    let iss: string | undefined;
+    let decoded: JWTPayload;
     try {
-      iss = decodeJwt(token).iss;
+      decoded = decodeJwt(token);
     } catch {
       return { ok: false, error: "malformed" };
     }
+    const iss = decoded.iss;
     const keys = iss ? this.keySets.get(iss) : undefined;
     if (!iss || !keys) return { ok: false, error: "untrusted issuer" };
 
-    const audience = agentUrl(this.gatewayUrl, agentId);
+    if (this.broken.has("signature")) return this.checkUnsigned(decoded, audience, agentId);
+
     try {
       const { payload } = await jwtVerify(token, keys, {
         issuer: iss,
-        audience,
+        audience: this.broken.has("audience") ? undefined : audience,
         algorithms: ALLOWED_ALGS,
         clockTolerance: CLOCK_SKEW_SECONDS,
         requiredClaims: ["exp", "iat", "sub", "jti"],
+        // planted defect: judge expiry as if it were still the moment of issue
+        currentDate:
+          this.broken.has("expiry") && decoded.iat ? new Date(decoded.iat * 1000) : undefined,
       });
-      const parsed = PassClaimsSchema.safeParse(payload);
-      if (!parsed.success) return { ok: false, error: "missing claims" };
-      const claims = parsed.data;
-      if (claims.exp - claims.iat > PASS_MAX_SECONDS + CLOCK_SKEW_SECONDS) {
-        return { ok: false, error: "lifetime too long" };
-      }
-      if (claims.act.sub !== agentId) return { ok: false, error: "issued to a different agent" };
-      const clientId = typeof payload.client_id === "string" ? payload.client_id : undefined;
-      return { ok: true, claims, clientId };
+      return this.checkClaims(payload, agentId);
     } catch (err) {
       if (err instanceof errors.JWTExpired) return { ok: false, error: "expired" };
       if (err instanceof errors.JWTClaimValidationFailed && err.claim === "aud") {
         return { ok: false, error: "wrong audience" };
       }
-      if (err instanceof errors.JWSSignatureVerificationFailed)
+      if (err instanceof errors.JWSSignatureVerificationFailed) {
         return { ok: false, error: "bad signature" };
-      if (err instanceof errors.JWKSNoMatchingKey)
+      }
+      if (err instanceof errors.JWKSNoMatchingKey) {
         return { ok: false, error: "unknown signing key" };
+      }
       return { ok: false, error: "invalid" };
     }
+  }
+
+  /** The checks after the signature: claims present, lifetime, the actor is this agent. */
+  private checkClaims(payload: JWTPayload, agentId: string): PassResult {
+    const parsed = PassClaimsSchema.safeParse(payload);
+    if (!parsed.success) return { ok: false, error: "missing claims" };
+    const claims = parsed.data;
+    if (claims.exp - claims.iat > PASS_MAX_SECONDS + CLOCK_SKEW_SECONDS) {
+      return { ok: false, error: "lifetime too long" };
+    }
+    if (claims.act.sub !== agentId) return { ok: false, error: "issued to a different agent" };
+    const clientId = typeof payload.client_id === "string" ? payload.client_id : undefined;
+    return { ok: true, claims, clientId };
+  }
+
+  /** Planted defect "signature": everything is checked except who signed it. */
+  private checkUnsigned(decoded: JWTPayload, audience: string, agentId: string): PassResult {
+    const now = Date.now() / 1000;
+    if (!this.broken.has("expiry") && (decoded.exp ?? 0) < now - CLOCK_SKEW_SECONDS) {
+      return { ok: false, error: "expired" };
+    }
+    if (!this.broken.has("audience") && ![decoded.aud].flat().includes(audience)) {
+      return { ok: false, error: "wrong audience" };
+    }
+    return this.checkClaims(decoded, agentId);
+  }
+
+  /** Planted defect "require_pass": no pass at all is treated as the default person's pass. */
+  private plantedDefaultPass(agentId: string, audience: string): PassResult {
+    const now = Math.floor(Date.now() / 1000);
+    const person = process.env.AIPASS_BROKEN_PERSON ?? "maria";
+    return this.checkClaims(
+      {
+        iss: "planted-defect",
+        sub: person,
+        aud: audience,
+        iat: now,
+        exp: now + 60,
+        jti: `planted-${now}`,
+        act: { sub: agentId },
+        patient: person,
+      },
+      agentId,
+    );
   }
 }

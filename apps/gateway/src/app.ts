@@ -23,9 +23,16 @@ export function createGateway(deps: GatewayDeps) {
   const { db, config } = deps;
   const fhir =
     deps.fhir ?? new FhirClient({ baseUrl: config.fhirBaseUrl, headers: config.fhirHeaders });
-  const verifier = deps.verifier ?? new PassVerifier(config.gatewayUrl, config.trustedIssuers);
-  const recorder = new Recorder(db, fhir);
-  const guard = new Guard({ db, fhir, config, recorder });
+  const broken = config.broken;
+  if (broken.size) {
+    console.warn(
+      `\n!!! aipass gateway running with PLANTED DEFECTS: ${[...broken].join(", ")} !!!\n`,
+    );
+  }
+  const verifier =
+    deps.verifier ?? new PassVerifier(config.gatewayUrl, config.trustedIssuers, undefined, broken);
+  const recorder = new Recorder(db, fhir, broken);
+  const guard = new Guard({ db, fhir, config, recorder, broken });
 
   // One handler serves MCP 2026-07-28 and falls back to stateless 2025-11-25.
   // The factory builds a fresh server per request, bound to the verified pass.
@@ -36,12 +43,16 @@ export function createGateway(deps: GatewayDeps) {
       throw new Error("MCP request reached the handler without a verified pass");
     }
     const clientId = authInfo?.extra?.clientId;
-    return buildServer(guard, {
-      agentId,
-      claims,
-      mode: "live",
-      clientId: typeof clientId === "string" ? clientId : undefined,
-    });
+    return buildServer(
+      guard,
+      {
+        agentId,
+        claims,
+        mode: "live",
+        clientId: typeof clientId === "string" ? clientId : undefined,
+      },
+      broken,
+    );
   });
 
   const prmUrl = (agentId: string) =>

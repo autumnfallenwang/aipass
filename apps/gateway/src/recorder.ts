@@ -1,6 +1,7 @@
 import { appendReceipt, type Db, newId } from "@aipass/db";
 import { buildAuditEvent, type FhirClient } from "@aipass/fhir";
 import type { Action, Group } from "@aipass/shared";
+import type { Defect } from "./broken.ts";
 
 export type ReceiptInput = {
   agent: { id: string; name: string };
@@ -36,6 +37,8 @@ export class Recorder {
   constructor(
     private readonly db: Db,
     private readonly fhir: FhirClient,
+    /** Planted defects (S4 self-test only). */
+    private readonly broken: ReadonlySet<Defect> = new Set(),
   ) {}
 
   /**
@@ -46,13 +49,17 @@ export class Recorder {
     const receiptId = newId("rcpt");
     let auditEventId: string | null = null;
     // A preview is the admin looking, not an agent acting: receipt only.
-    if (r.mode === "live") {
+    const skip = this.broken.has("audit_refusals") && r.decision === "refuse";
+    if (r.mode === "live" && !skip) {
       try {
         const ae = await this.fhir.create(
           buildAuditEvent({
             recorded: new Date().toISOString(),
             agent: r.agent,
-            person: r.person ? { ref: r.person.ref, name: r.person.name } : null,
+            person:
+              r.person && !this.broken.has("audit_person")
+                ? { ref: r.person.ref, name: r.person.name }
+                : null,
             patientRef: r.patientRef,
             interaction: r.interaction,
             query: r.query,

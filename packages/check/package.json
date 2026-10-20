@@ -1,0 +1,28 @@
+{
+  "name": "@aipass/check",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The aipass health check: identity and authorization probes for any agent-to-FHIR system.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run --passWithNoTests --exclude '**/*.int.test.ts'",
+    "test:integration": "vitest run .int.test --passWithNoTests --no-file-parallelism"
+  },
+  "dependencies": {
+    "@aipass/db": "workspace:*",
+    "@aipass/shared": "workspace:*",
+    "@modelcontextprotocol/client": "^2.3.1",
+    "drizzle-orm": "^0.45.4",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@aipass/fhir": "workspace:*",
+    "@aipass/gateway": "workspace:*",
+    "@hono/node-server": "^2.1.5",
+    "postgres": "^3.4.9"
+  }
+}

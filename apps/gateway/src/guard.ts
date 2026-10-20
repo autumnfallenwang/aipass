@@ -13,7 +13,16 @@ import {
   simplify,
 } from "@aipass/fhir";
 import { decideRequest, decideResource, type Refuse, refuse, type Verdict } from "@aipass/policy";
-import type { Group, PassClaims, PatientField, Permission } from "@aipass/shared";
+import {
+  ACTIONS,
+  GROUPS,
+  type Group,
+  type PassClaims,
+  type PatientField,
+  type Permission,
+  permission,
+} from "@aipass/shared";
+import type { Defect } from "./broken.ts";
 import type { GatewayConfig } from "./config.ts";
 import { openPage, sealPage } from "./paging.ts";
 import { AuditWriteFailed, type Recorder } from "./recorder.ts";
@@ -71,7 +80,14 @@ type Resolved = {
 
 export class Guard {
   constructor(
-    private readonly deps: { db: Db; fhir: FhirClient; config: GatewayConfig; recorder: Recorder },
+    private readonly deps: {
+      db: Db;
+      fhir: FhirClient;
+      config: GatewayConfig;
+      recorder: Recorder;
+      /** Planted defects (S4 self-test only). */
+      broken?: ReadonlySet<Defect>;
+    },
   ) {}
 
   /** Loads agent, role, person and grant live, and pins the patient. */
@@ -145,19 +161,40 @@ export class Guard {
       throw new Error("role overrides are for previews only");
     const r = await this.resolve(caller, override);
     const { ctx } = r;
+    const broken = this.deps.broken ?? new Set<Defect>();
     let verdict = decideRequest({
       pass: { ok: true },
       agent: ctx.agent
-        ? { id: ctx.agent.id, name: ctx.agent.name, status: ctx.agent.status }
+        ? {
+            id: ctx.agent.id,
+            name: ctx.agent.name,
+            status: broken.has("agent_status") ? "active" : ctx.agent.status,
+          }
         : null,
       client: caller.clientId
         ? { id: caller.clientId, approved: ctx.allowedClients.includes(caller.clientId) }
         : null,
-      role: ctx.role ? { name: ctx.role.name, permissions: ctx.role.permissions } : null,
+      role: ctx.role
+        ? {
+            name: ctx.role.name,
+            permissions: broken.has("role") ? EVERYTHING : ctx.role.permissions,
+          }
+        : null,
       person: ctx.person ? { id: ctx.person.id, displayName: ctx.person.displayName } : null,
-      grant: ctx.grant ? { status: ctx.grant.status, permissions: ctx.grant.permissions } : null,
+      grant: broken.has("grant")
+        ? { status: "active", permissions: EVERYTHING }
+        : ctx.grant
+          ? { status: ctx.grant.status, permissions: ctx.grant.permissions }
+          : null,
       request: { group: req.group, action: "read" },
     });
+    const facts = (res: Resource) => {
+      const f = factsOf(res);
+      if (broken.has("compartment")) f.patientRefs = [r.patientRef ?? ""];
+      if (broken.has("labels")) f.labels = [];
+      if (broken.has("include") && f.group !== null) f.group = req.group;
+      return f;
+    };
     if (verdict.decision === "allow") verdict = r.pin;
     if (verdict.decision === "refuse" || !r.patientRef || !r.person) {
       const v =
@@ -312,7 +349,9 @@ export class Guard {
         );
         for (const [k, v] of Object.entries(q.fixed)) p.set(k, v);
         for (const [k, v] of Object.entries(req.params ?? {})) {
-          if (SAFE_PARAMS.has(k)) p.set(k, v);
+          if (SAFE_PARAMS.has(k) || (this.deps.broken?.has("include") && INCLUDES.has(k))) {
+            p.set(k, v);
+          }
         }
         p.set("_count", limit);
         return { type: q.resourceType, params: p };
@@ -375,8 +414,12 @@ export class Guard {
 
 /** Search parameters a tool may add. Everything else (`_include`, `_has`, chains, operations) is dropped. */
 const SAFE_PARAMS = new Set(["code", "date", "status", "clinical-status", "_sort"]);
+/** Only ever passed on with the planted defect "include". */
+const INCLUDES = new Set(["_include", "_revinclude"]);
 
-function facts(r: Resource) {
+const EVERYTHING: Permission[] = GROUPS.flatMap((g) => ACTIONS.map((a) => permission(g, a)));
+
+function factsOf(r: Resource) {
   return { group: groupOf(r), patientRefs: patientRefsOf(r), labels: labelsOf(r) };
 }
 

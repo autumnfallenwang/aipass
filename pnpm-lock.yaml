@@ -29,6 +29,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@aipass/check':
+        specifier: workspace:*
+        version: link:../../packages/check
       '@aipass/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -191,6 +194,37 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+
+  packages/check:
+    dependencies:
+      '@aipass/db':
+        specifier: workspace:*
+        version: link:../db
+      '@aipass/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@modelcontextprotocol/client':
+        specifier: ^2.3.1
+        version: 2.3.1
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(kysely@0.29.7)(postgres@3.4.9)
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.12
+    devDependencies:
+      '@aipass/fhir':
+        specifier: workspace:*
+        version: link:../fhir
+      '@aipass/gateway':
+        specifier: workspace:*
+        version: link:../../apps/gateway
+      '@hono/node-server':
+        specifier: ^2.1.5
+        version: 2.1.5(hono@4.13.13)
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
 
   packages/db:
     dependencies:
