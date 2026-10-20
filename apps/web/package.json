@@ -7,7 +7,7 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "typecheck": "tsc -p . --noEmit"
+    "typecheck": "next typegen && tsc -p . --noEmit"
   },
   "dependencies": {
     "@aipass/shared": "workspace:*",

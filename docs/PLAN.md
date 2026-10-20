@@ -173,8 +173,8 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - [x] Spike results SP1–SP4 recorded in the table above and in the Log
 
 **Validate:**
-- [ ] A fresh clone, then `pnpm i && pnpm dev`, gives all apps healthy (`/health` 200) and HAPI returns Maria (`pnpm smoke` checks all four)
-- [ ] CI is green on `main`
+- [x] A fresh clone, then `pnpm i && pnpm dev`, gives all apps healthy (`/health` 200) and HAPI returns Maria (`pnpm smoke` checks all four). Measured: **27 s** from `pnpm dev` to all healthy, with containers and volume removed first
+- [x] CI is green on `main` (both jobs, first push)
 - [x] All four spikes answered; the consequences are written into S1 (one URL per agent), S3 (CIMD first) and S5 (approval link)
 
 ---
@@ -430,8 +430,8 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 
 | Stage | State | Dates | Note |
 |---|---|---|---|
-| S0 Foundation + spikes | 🟡 in progress | Oct 19– | skeleton, fixtures and all 4 spikes done; waiting for CI on `main` |
-| S1 The guard (read-only) | ⬜ | Oct 26 – Nov 3 | |
+| S0 Foundation + spikes | ✅ done | Oct 19 | all 4 spikes answered; SP2 changed the MCP SDK (D8), SP1 led to one URL per agent (D9) |
+| S1 The guard (read-only) | 🟡 next | Oct 26 – Nov 3 | |
 | S2 Admin UI v1 → v0.1 | ⬜ | Nov 3–12 | public release |
 | S3 Real login + person's yes → v0.2 | ⬜ | Nov 13–24 | |
 | S4 Health check | ⬜ | Nov 24 – Dec 3 | external scorecards |
@@ -447,6 +447,7 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-19 | **S0 ✅** Fresh clone with no containers or volume → `pnpm dev` → all healthy in 27 s; CI green. Web typecheck now runs `next typegen` first, so `next-env.d.ts` is no longer committed |
 | 2026-10-19 | **S0 started.** Postgres moved to host port 5433 (5432 collides with other local Postgres). TypeScript 6.0.3, not 7.0 (TS 7 is the native port with no JS API yet, which Next.js type-checking needs) |
 | 2026-10-19 | **SP4 ✅** Maria + John hand-written, 2 Synthea patients trimmed; load is idempotent (~1.5 s) |
 | 2026-10-19 | **SP3 ✅** HAPI v8.12.0-2 takes Device/AuditEvent/Provenance; `_security` and `_security:not` searches work |
