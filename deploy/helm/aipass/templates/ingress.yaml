@@ -21,10 +21,24 @@ spec:
       secretName: {{ . }}
   {{- end }}
   rules:
-    # People's browsers: only the web app. It passes /api/* to the api inside.
+    # People's browsers: one origin (D10). /api and the OAuth discovery
+    # documents go straight to the api, so it sees the ingress's
+    # X-Forwarded-For (rate limits); everything else is the web app.
     - host: {{ $web.hostname | quote }}
       http:
         paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: api, port: { number: 3001 } }
+          - path: /.well-known/oauth-authorization-server/api/auth
+            pathType: Exact
+            backend:
+              service: { name: api, port: { number: 3001 } }
+          - path: /.well-known/openid-configuration/api/auth
+            pathType: Exact
+            backend:
+              service: { name: api, port: { number: 3001 } }
           - path: /
             pathType: Prefix
             backend:

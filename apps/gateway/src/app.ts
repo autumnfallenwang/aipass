@@ -3,11 +3,12 @@ import { FhirClient, receiptSentence } from "@aipass/fhir";
 import { agentUrl, GROUPS, type PassClaims, rulesToPermissions } from "@aipass/shared";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { eq } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { Changes } from "./changes.ts";
 import type { GatewayConfig } from "./config.ts";
 import { type Caller, Guard, type RoleOverride } from "./guard.ts";
+import { clientAddress, RateLimiter } from "./limits.ts";
 import { PassVerifier } from "./pass.ts";
 import { Recorder } from "./recorder.ts";
 import { buildServer } from "./tools.ts";
@@ -20,6 +21,8 @@ export type GatewayDeps = {
   verifier?: PassVerifier;
   /** How the gateway reaches other FHIR servers and their token endpoints (tests watch it). */
   upstreamFetch?: typeof fetch;
+  /** The socket's address (the server passes it in; tests may not). */
+  remoteAddr?: (c: Context) => string | undefined;
 };
 
 const AGENT_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -149,6 +152,19 @@ export function createGateway(deps: GatewayDeps) {
     return c.json({ agentId, personId: p.personId, groups });
   });
 
+  const perPass = new RateLimiter(config.rateLimit.perPass);
+  const refusedPerAddress = new RateLimiter(config.rateLimit.refusedPerAddress);
+  const tooMany = (c: Context, retryAfterSeconds: number, who: string) => {
+    console.warn(`rate limit: ${who} (retry after ${retryAfterSeconds}s)`);
+    return c.json(
+      { error: "rate_limited", error_description: "too many requests; slow down" },
+      429,
+      {
+        "Retry-After": String(retryAfterSeconds),
+      },
+    );
+  };
+
   app.all("/agents/:agentId/mcp", async (c) => {
     const agentId = c.req.param("agentId");
     const agent = AGENT_ID.test(agentId) ? await findAgent(db, agentId) : undefined;
@@ -156,6 +172,15 @@ export function createGateway(deps: GatewayDeps) {
 
     const result = await verifier.verify(c.req.header("authorization"), agentId);
     if (!result.ok) {
+      // Refusals are audited, so a flood of bad passes is limited before it
+      // reaches the audit trail.
+      const addr = clientAddress(
+        deps.remoteAddr?.(c),
+        c.req.header("x-forwarded-for"),
+        config.trustedProxies,
+      );
+      const slot = refusedPerAddress.take(`${agentId}|${addr}`);
+      if (!slot.ok) return tooMany(c, slot.retryAfterSeconds, `refused passes from ${addr}`);
       const reason = `no valid pass (${result.error})`;
       await recorder.record({
         agent: { id: agentId, name: agent.name },
@@ -189,6 +214,10 @@ export function createGateway(deps: GatewayDeps) {
       });
     }
 
+    const slot = perPass.take(`${agentId}|${result.claims.sub}`);
+    if (!slot.ok) {
+      return tooMany(c, slot.retryAfterSeconds, `${agentId} for ${result.claims.sub}`);
+    }
     return mcp.fetch(c.req.raw, {
       authInfo: {
         token: "[verified pass]",

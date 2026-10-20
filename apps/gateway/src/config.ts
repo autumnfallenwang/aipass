@@ -33,6 +33,10 @@ export type GatewayConfig = {
   vaultKey: Buffer;
   /** Opens them: the current key, then any previous ones during a rotation. */
   vaultKeys: Buffer[];
+  /** Calls per minute: per agent and person with a valid pass; per address when refused (S7). */
+  rateLimit: { perPass: number; refusedPerAddress: number };
+  /** Proxies in front whose X-Forwarded-For is believed (addresses or IPv4 CIDR). */
+  trustedProxies: string[];
   /** Planted defects (S4 self-test only; refused in production). */
   broken: ReadonlySet<Defect>;
 };
@@ -66,6 +70,14 @@ export function loadConfig(env = process.env): GatewayConfig {
       const keys = vaultKeys(env);
       return { vaultKey: keys[0] as Buffer, vaultKeys: keys };
     })(),
+    rateLimit: {
+      perPass: Number(env.GATEWAY_RATE_LIMIT ?? 300),
+      refusedPerAddress: Number(env.GATEWAY_REFUSED_RATE_LIMIT ?? 60),
+    },
+    trustedProxies: (env.AIPASS_TRUSTED_PROXIES ?? "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean),
     broken: parseBroken(env.AIPASS_BROKEN, env),
   };
 }

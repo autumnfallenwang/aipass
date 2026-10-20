@@ -13,7 +13,7 @@ await syncOAuth(db).catch((err: Error) => console.error(`OAuth sync failed: ${er
 const app = createApp({
   db,
   auth: createAuth(db),
-  fhir: new FhirClient({ baseUrl: config.fhirBaseUrl }),
+  fhir: new FhirClient({ baseUrl: config.fhirBaseUrl, headers: config.fhirHeaders }),
   remoteAddr: (c) => getConnInfo(c).remote.address,
 });
 

@@ -36,6 +36,8 @@ app.kubernetes.io/component: {{ .component }}
   value: {{ .Values.fhirBaseUrl | quote }}
 - name: ORG_NAME
   value: {{ .Values.orgName | quote }}
+- name: AIPASS_TRUSTED_PROXIES
+  value: {{ join "," .Values.trustedProxies | quote }}
 {{- range $key := list "DATABASE_URL" "BETTER_AUTH_SECRET" "AIPASS_VAULT_KEY" }}
 - name: {{ $key }}
   valueFrom:

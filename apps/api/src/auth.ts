@@ -176,7 +176,12 @@ export function createAuth(db: Db) {
         onClientCreated: async ({ client }) => linkPendingClient(db, client.clientId),
       }),
     ],
-    advanced: { cookiePrefix: "aipass" },
+    advanced: {
+      cookiePrefix: "aipass",
+      // Rate limits key on the client's address. Behind a proxy, only its
+      // X-Forwarded-For is believed, and only for the proxies listed (S7).
+      ipAddress: { trustedProxies: config.trustedProxies },
+    },
   });
 }
 

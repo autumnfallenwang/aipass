@@ -17,7 +17,7 @@ if (process.env.AIPASS_DEMO === "1") {
   await loadFixtures(config.fhirBaseUrl, dir);
   const { db, close } = createDb(config.databaseUrl);
   try {
-    await seedDemoAll(db, { fhirBaseUrl: config.fhirBaseUrl });
+    await seedDemoAll(db, { fhirBaseUrl: config.fhirBaseUrl, fhirHeaders: config.fhirHeaders });
   } finally {
     await close();
   }

@@ -23,6 +23,8 @@ x-aipass-env: &aipass-env
   AIPASS_VAULT_KEY: ${AIPASS_VAULT_KEY:-aipass-local-trial-vault-key-localhost-only}
   AIPASS_VAULT_KEY_PREVIOUS: ${AIPASS_VAULT_KEY_PREVIOUS:-}
   ORG_NAME: ${ORG_NAME:-Sunrise Clinic}
+  # Behind your own proxy: its addresses, so rate limits see real clients.
+  AIPASS_TRUSTED_PROXIES: ${AIPASS_TRUSTED_PROXIES:-}
 
 services:
   postgres:

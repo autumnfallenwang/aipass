@@ -33,11 +33,11 @@ docker compose up
 
 This builds and starts everything: Postgres, a HAPI FHIR server with the synthetic patients, the api, the gateway and the web app. From an empty Docker on our test machine, it took under 2 minutes to have every service healthy. Then open **http://localhost:3000**; the first account you create becomes the admin. AI clients connect to `http://localhost:3002/agents/{agent-id}/mcp`.
 
-The secrets in `compose.yaml` are public values for a local trial. aipass refuses them unless it runs on localhost. Signed images (`ghcr.io/autumnfallenwang/aipass-{api,gateway,web}`) and a Helm chart (`deploy/helm/aipass`) are there for your own deployment. The project itself deploys nothing (see [decisions](docs/decisions.md), D12).
+The secrets in `compose.yaml` are public values for a local trial. aipass refuses them unless it runs on localhost. The repo also has a Helm chart (`deploy/helm/aipass`) and a workflow that can publish signed images. For now the project only develops and tests on localhost and deploys nothing (see [decisions](docs/decisions.md), D12).
 
 ## Develop (about 5 minutes)
 
-You need Node 22+ (24 LTS recommended), pnpm 10 and Docker.
+You need Node 22+ (24 LTS recommended), pnpm 10 and Docker. The dev setup uses the same ports as the Docker stack (3000 and 3002), so stop that first: `docker compose down`.
 
 ```sh
 git clone https://github.com/autumnfallenwang/aipass.git
@@ -115,7 +115,7 @@ CI also builds the containers and runs `docker compose up`, which must score A o
 
 - [Threat model](docs/security/threat-model.md): what aipass protects, from whom, how, and what's still open.
 - [OWASP ASVS 5.0 Level 2 self-check](docs/security/asvs-l2.md): every requirement, with evidence.
-- Releases are signed. Each image and source tarball has a GitHub attestation (SLSA provenance, Sigstore). Check one with `gh attestation verify oci://ghcr.io/autumnfallenwang/aipass-api:<version> --owner autumnfallenwang`.
+- Signed builds: the release workflow (run by hand) attaches a GitHub attestation (SLSA provenance, Sigstore) to each image it publishes. Check one with `gh attestation verify oci://ghcr.io/autumnfallenwang/aipass-api:edge --owner autumnfallenwang`.
 - The whole story: [Who did this, for whom? Identity for AI agents on FHIR](docs/writeup.md).
 
 ## Status

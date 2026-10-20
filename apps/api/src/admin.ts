@@ -531,6 +531,7 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
           gatewayUrl: config.gatewayUrl,
           passIssuer: passIssuer(),
           fhirBaseUrl: config.fhirBaseUrl,
+          fhirHeaders: config.fhirHeaders,
           // the approval endpoints live on this api; no need to go through the web app
           publicUrl: config.apiUrl,
           // passes still name the public gateway URL; the calls may go another way

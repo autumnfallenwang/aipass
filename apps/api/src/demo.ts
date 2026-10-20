@@ -60,11 +60,11 @@ async function seedLogins(db: Db): Promise<void> {
 /** Adds whatever of the demo is missing, or (`reset`) puts it back to its starting state. */
 export async function seedDemoAll(
   db: Db,
-  opts: { fhirBaseUrl: string; reset?: boolean },
+  opts: { fhirBaseUrl: string; fhirHeaders?: Record<string, string>; reset?: boolean },
 ): Promise<void> {
   await seedDemo(db, { reset: opts.reset });
   await seedLogins(db);
   await syncOAuth(db);
-  const fhir = new FhirClient({ baseUrl: opts.fhirBaseUrl });
+  const fhir = new FhirClient({ baseUrl: opts.fhirBaseUrl, headers: opts.fhirHeaders });
   for (const a of DEMO.agents) await fhir.update(buildDevice({ ...a, status: "active" }));
 }

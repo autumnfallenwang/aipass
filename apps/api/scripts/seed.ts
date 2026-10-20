@@ -11,7 +11,11 @@ import { seedDemoAll } from "../src/demo.ts";
 const reset = process.argv.includes("--reset");
 const { db, close } = createDb(config.databaseUrl);
 try {
-  await seedDemoAll(db, { fhirBaseUrl: config.fhirBaseUrl, reset });
+  await seedDemoAll(db, {
+    fhirBaseUrl: config.fhirBaseUrl,
+    fhirHeaders: config.fhirHeaders,
+    reset,
+  });
   console.info(reset ? "demo reset" : "demo seeded");
 } finally {
   await close();

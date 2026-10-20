@@ -33,6 +33,8 @@ export type AipassTargetOptions = {
   publicUrl?: string;
   /** How to reach those endpoints (in-process tests pass the api app's fetch). */
   apiFetch?: typeof fetch;
+  /** aipass's credential for its FHIR server, if it needs one. */
+  fhirHeaders?: Record<string, string>;
   /** Which synthetic person the probes act for. Must have a `Patient/…` record with the fixtures. */
   person?: string;
   /**
@@ -66,6 +68,7 @@ export function aipassTarget(o: AipassTargetOptions): Target {
   const person = o.person ?? "maria";
   const { db } = o;
   const fhir = o.fhirBaseUrl.replace(/\/$/, "");
+  const auth = o.fhirHeaders ?? {};
 
   async function signingKey(): Promise<{ kid: string; key: CryptoKey }> {
     const [row] = await db.select().from(passKeys).where(isNull(passKeys.retiredAt)).limit(1);
@@ -168,7 +171,7 @@ export function aipassTarget(o: AipassTargetOptions): Target {
       for (const a of Object.values(CHECK_AGENTS)) {
         await fetch(`${fhir}/Device/${agentDeviceId(a.id)}`, {
           method: "PUT",
-          headers: { "content-type": "application/fhir+json" },
+          headers: { ...auth, "content-type": "application/fhir+json" },
           body: JSON.stringify({
             resourceType: "Device",
             id: agentDeviceId(a.id),
@@ -182,8 +185,8 @@ export function aipassTarget(o: AipassTargetOptions): Target {
 
     async teardown() {
       for (const ref of written) {
-        await fetch(`${fhir}/Provenance?target=${ref}`, { method: "DELETE" });
-        await fetch(`${fhir}/${ref}`, { method: "DELETE" });
+        await fetch(`${fhir}/Provenance?target=${ref}`, { method: "DELETE", headers: auth });
+        await fetch(`${fhir}/${ref}`, { method: "DELETE", headers: auth });
       }
       written.clear();
       const ids = Object.values(CHECK_AGENTS).map((a) => a.id);
@@ -339,7 +342,7 @@ export function aipassTarget(o: AipassTargetOptions): Target {
         _count: "50",
       });
       const res = await fetch(`${fhir}/AuditEvent?${q}`, {
-        headers: { accept: "application/fhir+json" },
+        headers: { ...auth, accept: "application/fhir+json" },
       });
       const bundle = (await res.json()) as {
         entry?: {

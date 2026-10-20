@@ -413,7 +413,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - [x] [Threat model](security/threat-model.md): assets, actors, trust boundaries, each threat with its control and proof, and the residual risks
 - [x] [OWASP ASVS 5.0 Level 2 self-check](security/asvs-l2.md): all 253 L1+L2 requirements, each with evidence
 - [x] Dependency audit: `pnpm audit --prod` gates CI (clean); Dependabot for npm, Actions and Docker. One dev-only advisory is left (braces, via the shadcn CLI; no fix published)
-- [x] Signed releases: `release.yml` publishes the images with an SBOM, SLSA provenance and a Sigstore-signed GitHub attestation, plus an attested source tarball. Verified with `gh attestation verify` on an `edge` build
+- [x] Signed releases: `release.yml` publishes the images with an SBOM, SLSA provenance and a Sigstore-signed GitHub attestation. Verified with `gh attestation verify` on an `edge` build. Per amended D12 it runs by hand only; v1.0.0 is released as source
 - [x] Docker images + `docker compose up` from a clean machine in under 10 min: **114 s**, timed in an empty Docker-in-Docker from a fresh `git clone`, with the health check graded A inside it. CI runs the same on every push. Nothing is deployed (D12)
 - [x] Vault key rotation: `AIPASS_VAULT_KEY_PREVIOUS` + `pnpm vault:rotate`
 - [x] Optional, evidence-driven:
@@ -462,6 +462,7 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-20 | **D12 amended (owner):** we're early, so no more time goes into CI/CD or deployment. The files stay, used for localhost test runs and the dev loop only. No k3s; the image release runs by hand only |
 | 2026-10-20 | **S7 ✅ v1.0.0.** D15 (how aipass ships; Cedar and Permission Tickets not adopted yet). Owner-gated items are still open: filing the S4 issues, a person's README run, the real-phone passkey, and the Google and Epic cells |
 | 2026-10-20 | **Surprise:** the first container stack graded C. The api reached the gateway at its public URL, which inside a container isn't the gateway, and some probes "passed" because nothing came back. Fixes: `GATEWAY_INTERNAL_URL`, and the check now runs a control first (no allowed read means no probes, grade F) |
 | 2026-10-20 | **Prediction:** "`docker compose up` from a clean machine in < 10 min". Actual: 114 s (empty Docker-in-Docker, fresh clone, all images pulled and built). Bundling the servers with esbuild meant no `node_modules` at run time; images are 248–300 MB, of which 242 MB is the Node base |

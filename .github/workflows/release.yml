@@ -1,14 +1,14 @@
 name: release
 
-# Signed releases (S7). For a published GitHub release, and by hand as `edge`:
+# Signed releases (S7). Runs by hand only for now (D12): we develop and test
+# on localhost and spend no time on deployment yet. When run:
 # - the api, gateway and web images go to GHCR, with an SBOM and SLSA
 #   provenance from BuildKit, and a GitHub artifact attestation (Sigstore);
 # - for a release, a source tarball with its own attestation is attached.
 # Verify with:  gh attestation verify oci://ghcr.io/autumnfallenwang/aipass-api:<version> --owner autumnfallenwang
 #               gh attestation verify aipass-<version>.tar.gz --owner autumnfallenwang
 on:
-  release:
-    types: [published]
+  # Was also `release: [published]`; switched off until deployment is in scope.
   workflow_dispatch:
     inputs:
       tag:

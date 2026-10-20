@@ -41,6 +41,12 @@ resources:
   gateway: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 384Mi } }
   web: { requests: { cpu: 100m, memory: 192Mi }, limits: { memory: 512Mi } }
 
+# The proxies in front of aipass (your ingress controller's addresses or
+# IPv4 ranges). Rate limits key on the client's address, and only these may
+# say what it is (X-Forwarded-For). Leave empty and every caller behind the
+# ingress shares one limit.
+trustedProxies: []
+
 ingress:
   enabled: false
   className: ""

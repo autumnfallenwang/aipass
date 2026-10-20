@@ -73,6 +73,7 @@ Each row names the control and the test that proves it. "Probe" means the health
 | Approves its own proposal | Approval endpoints need the person's browser session *and* their passkey; a pass is not a session | probe `self_approve`; A1, A6 |
 | Keeps working after being stopped or revoked | The agent's status and the grant are read live on each call; revoking also revokes the person's refresh tokens for that agent | probes `stopped_agent`, `revoked_grant`; measured < 0.1 s |
 | Edits a paging token to see more | Paging tokens are sealed (AES-256-GCM) and bound to agent, patient and group | `paging.test.ts` |
+| Floods: one agent hammering the gateway, or a stream of bad passes filling the audit trail | Per agent and person: 300 calls a minute. Per client address, for refused passes: 60, then `429` with `Retry-After` and nothing written | `s7-limits.int.test.ts`, `limits.test.ts` |
 | Prompt injection tells the agent to ask for more | The gateway trusts nothing the agent says: the patient, the rules and the person come from the pass and the database. Injection can only misuse what the agent is already allowed | by construction; every probe above |
 
 ### Passes (B2)
@@ -88,7 +89,7 @@ Each row names the control and the test that proves it. "Probe" means the health
 
 | Threat | Control | Proof |
 |---|---|---|
-| Account takeover by guessing passwords | Better Auth's rate limiter (on in production); passwords of 10+ characters; passkeys | delegated; see [asvs-l2.md](asvs-l2.md) for what's still missing (MFA for admins, breached-password checks) |
+| Account takeover by guessing passwords | Better Auth's rate limiter (on in production), keyed by the client's address: behind a proxy, only the proxies in `AIPASS_TRUSTED_PROXIES` may say what it is, and the Helm ingress sends `/api` straight to the api so that address arrives. Passwords of 10+ characters; passkeys | delegated; see [asvs-l2.md](asvs-l2.md) for what's still missing (MFA for admins, breached-password checks) |
 | A cross-site request uses someone's session | One origin (D10); SameSite cookies; Better Auth's origin check on auth routes; JSON APIs need a preflight that other origins don't pass | e2e on the real origin |
 | Someone else approves Maria's change | The approver must be the named person, signed in, with their own passkey | A6 |
 | A token from a login system nobody trusted | Only enabled connections. Their discovered keys, the audience, a verified email, an existing login; no sign-up; one hop (`act`, `may_act`, `cnf` refused) (D13) | `exchange.int.test.ts` (15 tests); e2e sign-in refusals |
@@ -130,7 +131,7 @@ Each row names the control and the test that proves it. "Probe" means the health
 2. **Passes are bearer tokens for up to 5 minutes.** *Change:* sender-constrained passes (DPoP) once agent clients support them.
 3. **Admins can see charts through *Preview*, and can configure any connection or server.** That is the job, as with an EHR administrator. *Change:* separate "configure" and "preview" roles; previews recorded like agent calls (today they write a preview receipt).
 4. **An allowed agent can still misuse what it was allowed.** aipass bounds an agent; it doesn't make it wise. The person sees every receipt on *My AIs* and can revoke at any time.
-5. **No rate limiting on the gateway itself.** Every call is checked and recorded, but nothing stops a flood. *Change:* a rate limit per agent and per pass, or a proxy in front.
+5. **Rate limits are per process.** The gateway limits each agent acting for each person (300 calls a minute by default). It also limits refused passes per client address (60), before they reach the audit trail. The counters live in memory, so several gateway replicas each count on their own. *Change:* a shared limit at the ingress, or a shared store.
 6. **TLS, backups, host hardening and the FHIR servers' own security are the adopter's** (D12).
 
 ## Out of scope
