@@ -341,6 +341,33 @@ describe("S1: the guard, read-only", () => {
     expect(await verifyReceiptChain(h.db)).toBeNull();
   });
 
+  it("an edited receipt, or a removed one, breaks the chain at that point", async () => {
+    const s = await h.connect("diabetes-coach", await h.pass("diabetes-coach", "maria"));
+    await s.call("search_labs");
+    await s.call("get_notes", { id: "maria-note-therapy" });
+    await s.call("list_conditions");
+    await s.close();
+    const rows = await h.db.select().from(receipts).orderBy(receipts.seq);
+    const [, second, third] = rows.slice(-3);
+    // someone softens a refusal after the fact
+    await h.db
+      .update(receipts)
+      .set({ sentence: "Diabetes Coach read 1 visit note for Maria Santos." })
+      .where(eq(receipts.id, second?.id ?? ""));
+    expect(await verifyReceiptChain(h.db)).toBe(second?.id);
+    // put it back, then remove one instead
+    await h.db
+      .update(receipts)
+      .set({ sentence: second?.sentence ?? "" })
+      .where(eq(receipts.id, second?.id ?? ""));
+    expect(await verifyReceiptChain(h.db)).toBeNull();
+    await h.db.delete(receipts).where(eq(receipts.id, second?.id ?? ""));
+    expect(await verifyReceiptChain(h.db)).toBe(third?.id);
+    // and restore it, so the test database's chain stays whole
+    if (second) await h.db.insert(receipts).values(second);
+    expect(await verifyReceiptChain(h.db)).toBeNull();
+  });
+
   it("speaks MCP 2025-11-25 too (stateless fallback)", async () => {
     const res = await h.appFetch(`${GATEWAY}/agents/diabetes-coach/mcp`, {
       method: "POST",
