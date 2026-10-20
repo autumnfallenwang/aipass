@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { isLoopbackUrl, LOCAL_TRIAL_SECRETS } from "@aipass/shared";
 
 const DEV_KEY = "aipass-dev-only-vault-key-do-not-use-in-production";
 
@@ -7,6 +8,14 @@ const derive = (k: string) => createHash("sha256").update(k).digest();
 /** The vault key that seals: AIPASS_VAULT_KEY (32+ characters) hashed to 256 bits. Required in production. */
 export function vaultKey(env: NodeJS.ProcessEnv = process.env): Buffer {
   const k = env.AIPASS_VAULT_KEY;
+  if (
+    k === LOCAL_TRIAL_SECRETS.vault &&
+    !isLoopbackUrl(env.PUBLIC_URL ?? "http://localhost:3000")
+  ) {
+    throw new Error(
+      "AIPASS_VAULT_KEY is the public local-trial value; set your own outside localhost",
+    );
+  }
   if (k && k.length >= 32) return derive(k);
   if (env.NODE_ENV === "production") {
     throw new Error("AIPASS_VAULT_KEY (32+ characters) is required in production");

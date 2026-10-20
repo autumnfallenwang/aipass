@@ -507,6 +507,19 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
   // ---------- health check (S4) ----------
 
   let checking = false;
+  const viaInternalGateway: typeof fetch | undefined =
+    config.gatewayInternalUrl === config.gatewayUrl
+      ? undefined
+      : (input, init) => {
+          const u = String(input instanceof Request ? input.url : input);
+          return fetch(
+            u.startsWith(config.gatewayUrl)
+              ? config.gatewayInternalUrl + u.slice(config.gatewayUrl.length)
+              : input,
+            init,
+          );
+        };
+
   app.post("/check", async (c) => {
     if (checking) return c.json({ error: "a health check is already running" }, 409);
     checking = true;
@@ -520,6 +533,8 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
           fhirBaseUrl: config.fhirBaseUrl,
           // the approval endpoints live on this api; no need to go through the web app
           publicUrl: config.apiUrl,
+          // passes still name the public gateway URL; the calls may go another way
+          fetch: viaInternalGateway,
           version: process.env.npm_package_version ?? "dev",
         }),
         { command: "pnpm check" },

@@ -10,7 +10,7 @@
     "typecheck": "tsc -p .",
     "test": "vitest run --passWithNoTests --exclude '**/*.int.test.ts'",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/migrate.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
     "test:integration": "vitest run .int.test --passWithNoTests --no-file-parallelism"
   },
   "dependencies": {

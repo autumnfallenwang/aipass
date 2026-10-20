@@ -1,0 +1,16 @@
+**/node_modules
+**/.next
+**/.next-e2e
+**/dist
+**/.turbo
+**/test-results
+**/playwright-report
+**/coverage
+**/*.tsbuildinfo
+.git
+.env
+.env.*
+!.env.example
+.keys
+docs/research
+.playwright-mcp

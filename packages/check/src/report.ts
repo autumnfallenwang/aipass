@@ -1,4 +1,4 @@
-import { PENDING_PROBES, PROBES } from "./probes.ts";
+import { MARKERS, PENDING_PROBES, PROBES } from "./probes.ts";
 import type { ProbeResult, Target } from "./types.ts";
 
 export type Grade = "A" | "B" | "C" | "D" | "F";
@@ -35,6 +35,23 @@ export function grade(results: ProbeResult[]): { grade: Grade; summary: Report["
 }
 
 /** Runs every probe against a target, in order, and grades it. */
+/**
+ * The control: a good pass reading Maria's labs must return them. Returns why
+ * not, or null when the target answers an allowed request.
+ */
+async function controlFails(t: Target): Promise<string | null> {
+  try {
+    const o = await t.search(await t.credential({}), "Observation", {
+      patient: "maria",
+      category: "laboratory",
+    });
+    if (MARKERS.mariasLabs.some((m) => o.text.includes(m))) return null;
+    return `the allowed request (a good pass reading Maria's labs) didn't return them (${o.status}: ${o.text.slice(0, 120)})`;
+  } catch (err) {
+    return `the allowed request failed: ${(err as Error).message}`;
+  }
+}
+
 export async function runChecks(
   t: Target,
   opts: { only?: string[]; command?: string } = {},
@@ -42,8 +59,22 @@ export async function runChecks(
   await t.setup?.();
   const results: ProbeResult[] = [];
   try {
+    // Every "turned away" means nothing if the target turns everything away
+    // (or can't be reached), so an allowed request has to work first.
+    const broken = await controlFails(t);
     for (const p of PROBES) {
       if (opts.only && !opts.only.includes(p.id)) continue;
+      if (broken) {
+        results.push({
+          id: p.id,
+          title: p.title,
+          tries: p.tries,
+          leak: p.leak,
+          status: "fail",
+          detail: `not run: ${broken}`,
+        });
+        continue;
+      }
       let r: { status: ProbeResult["status"]; detail: string };
       try {
         r = await p.run(t);

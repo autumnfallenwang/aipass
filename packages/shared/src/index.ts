@@ -175,3 +175,23 @@ export const LOCKED_LABEL_TITLES: Record<LockedLabel["kind"], string> = {
   hiv: "HIV",
   restricted: "Restricted",
 };
+
+/**
+ * The secrets `compose.yaml` ships with for a local trial (S7). They are
+ * public, so they are refused unless aipass's public origin is loopback.
+ */
+export const LOCAL_TRIAL_SECRETS = {
+  auth: "aipass-local-trial-auth-secret-localhost-only",
+  vault: "aipass-local-trial-vault-key-localhost-only",
+} as const;
+
+/** True for http(s)://localhost, 127.x and [::1] origins. */
+export function isLoopbackUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const h = new URL(url).hostname.replace(/^\[|\]$/g, "");
+    return h === "localhost" || h.endsWith(".localhost") || /^127\./.test(h) || h === "::1";
+  } catch {
+    return false;
+  }
+}

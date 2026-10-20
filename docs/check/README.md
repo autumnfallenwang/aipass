@@ -45,6 +45,7 @@ Leaks are judged by **markers**: strings from the fixtures that can only appear 
 - Two failed leak probes mean **F**; one means **D** at best. The leak probes are `no_pass`, `wrong_patient`, `locked_label_leak`, `role_escape` and `include_escape`.
 - Otherwise the grade follows the share of probes passed: 100% is **A**, 85% or more **B**, 65% or more **C**, 40% or more **D**, and below that **F**.
 - *Missing* counts against the grade like a failure, but is reported separately.
+- **The control comes first.** Before any probe, a good pass must read Maria's labs. If it can't (the target is down, unreachable, or refuses everything), no probe runs, every one is reported as a failure, and the grade is **F**. A target that turns everyone away isn't safe; it's broken, and "turned away" would mean nothing.
 
 ## Proving the inspector
 

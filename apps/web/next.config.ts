@@ -1,9 +1,17 @@
+import { join } from "node:path";
 import type { NextConfig } from "next";
 
 const apiUrl = (process.env.API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
 const config: NextConfig = {
   transpilePackages: ["@aipass/shared"],
+  // The Docker image (S7) runs Next's standalone server; dev and e2e don't.
+  ...(process.env.NEXT_OUTPUT === "standalone"
+    ? {
+        output: "standalone" as const,
+        outputFileTracingRoot: join(import.meta.dirname, "..", ".."),
+      }
+    : {}),
   poweredByHeader: false,
   devIndicators: false,
   // The end-to-end tests run a second dev server next to yours.

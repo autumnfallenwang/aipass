@@ -8,6 +8,7 @@ export {
 } from "./audit.ts";
 export { FhirClient, type FhirClientOptions, FhirError } from "./client.ts";
 export { normaliseRef, patientRefsOf } from "./compartment.ts";
+export { loadFixtures } from "./fixtures.ts";
 export { GROUP_QUERIES, type GroupQuery, groupOf } from "./groups.ts";
 export { smartLauncherFhirUrl } from "./launcher.ts";
 export { maskPatient } from "./mask.ts";

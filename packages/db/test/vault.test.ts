@@ -49,4 +49,15 @@ describe("the vault's sealing (AES-256-GCM)", () => {
     expect(() => unseal(keys[0] as Buffer, old, "maria|ehr")).toThrow();
     expect(() => vaultKeys({ ...env, AIPASS_VAULT_KEY_PREVIOUS: "too-short" })).toThrow();
   });
+
+  it("refuses the public local-trial key anywhere but localhost", () => {
+    const trial = {
+      NODE_ENV: "production",
+      AIPASS_VAULT_KEY: "aipass-local-trial-vault-key-localhost-only",
+    };
+    expect(vaultKey({ ...trial, PUBLIC_URL: "http://localhost:3000" }).length).toBe(32);
+    expect(() => vaultKey({ ...trial, PUBLIC_URL: "https://aipass.example.org" })).toThrow(
+      "local-trial",
+    );
+  });
 });

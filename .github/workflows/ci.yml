@@ -59,3 +59,20 @@ jobs:
       - name: Service logs on failure
         if: failure()
         run: docker compose -f deploy/compose.yaml --profile keycloak --profile smart logs --tail=200
+
+  stack:
+    name: docker compose up (the whole stack, from source)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Build and start every service
+        run: docker compose up -d --build --wait
+      - name: The health check, through the public origin, grades A
+        run: node scripts/stack-check.mjs
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
