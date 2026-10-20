@@ -10,6 +10,7 @@ import {
   unseal,
   vault,
   vaultKey,
+  vaultKeys,
 } from "@aipass/db";
 import { authorizeUrl, discoverSmart, exchangeCode, pkcePair } from "@aipass/fhir";
 import { and, eq, gt, inArray } from "drizzle-orm";
@@ -215,7 +216,7 @@ export function personFhirRoutes(deps: { db: Db; auth: Auth; fetch?: typeof fetc
           tokenUrl: server.tokenUrl,
           clientId: server.clientId,
           clientSecret: server.clientSecretSealed
-            ? unseal(key, server.clientSecretSealed, `server|${server.id}`)
+            ? unseal(vaultKeys(), server.clientSecretSealed, `server|${server.id}`)
             : null,
         },
         { code, redirectUri: callbackUrl(), codeVerifier: launch.codeVerifier },

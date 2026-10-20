@@ -51,7 +51,10 @@ People can **Disconnect** at any time.
 
 ### Production notes
 
-- **Vault key.** Set `AIPASS_VAULT_KEY` (32+ characters) for the api and the gateway. In production they refuse to start without it. Keep it: nothing sealed with one key opens with another, neither people's connections nor client secrets. Key rotation isn't built yet.
+- **Vault key.** Set `AIPASS_VAULT_KEY` (32+ characters) for the api and the gateway. In production they refuse to start without it. To change it:
+  1. Set the new key as `AIPASS_VAULT_KEY` and the old one as `AIPASS_VAULT_KEY_PREVIOUS`, for both, and restart them. Both keys now open sealed values; only the new one seals.
+  2. Run `pnpm vault:rotate` with the same two variables. It re-seals every connection and client secret with the new key, and lists anything no key opens.
+  3. Remove `AIPASS_VAULT_KEY_PREVIOUS`.
 - **Writes.** Approved changes are written to the EHR with the person's token, with a Provenance that names the AI by identifier. If the EHR doesn't accept the write, aipass reports *"nothing was written"* and the approval can be used again.
 - **Admin previews.** *Preview as this role* reads aipass's own server only. It never uses a person's connected record.
 

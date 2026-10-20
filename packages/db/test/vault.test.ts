@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { seal, unseal, vaultKey } from "../src/vault.ts";
+import { seal, unseal, vaultKey, vaultKeys } from "../src/vault.ts";
 
 const key = vaultKey({ AIPASS_VAULT_KEY: "a-test-vault-key-that-is-long-enough-123" });
 
@@ -34,5 +34,19 @@ describe("the vault's sealing (AES-256-GCM)", () => {
     expect(() => vaultKey({ NODE_ENV: "production" })).toThrow("AIPASS_VAULT_KEY");
     expect(() => vaultKey({ NODE_ENV: "production", AIPASS_VAULT_KEY: "short" })).toThrow();
     expect(vaultKey({}).length).toBe(32);
+  });
+
+  it("opens with a previous key during a rotation, and seals only with the current one", () => {
+    const env = {
+      AIPASS_VAULT_KEY: "the-new-vault-key-that-is-long-enough-456",
+      AIPASS_VAULT_KEY_PREVIOUS: "a-test-vault-key-that-is-long-enough-123",
+    };
+    const keys = vaultKeys(env);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]?.equals(vaultKey(env))).toBe(true);
+    const old = seal(key, "upstream-token", "maria|ehr");
+    expect(unseal(keys, old, "maria|ehr")).toBe("upstream-token");
+    expect(() => unseal(keys[0] as Buffer, old, "maria|ehr")).toThrow();
+    expect(() => vaultKeys({ ...env, AIPASS_VAULT_KEY_PREVIOUS: "too-short" })).toThrow();
   });
 });

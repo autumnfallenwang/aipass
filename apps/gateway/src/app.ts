@@ -40,6 +40,7 @@ export function createGateway(deps: GatewayDeps) {
     db,
     home: fhir,
     key: config.vaultKey,
+    keys: config.vaultKeys,
     fetch: deps.upstreamFetch,
   });
   const guard = new Guard({ db, config, recorder, upstreams, broken });

@@ -27,6 +27,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Dependency audit (everything that ships)
+        run: pnpm audit --prod
 
   integration:
     name: integration + end-to-end (Postgres, HAPI FHIR, Keycloak, SMART)

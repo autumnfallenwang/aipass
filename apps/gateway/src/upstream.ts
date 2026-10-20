@@ -22,11 +22,23 @@ const EARLY_MS = 30_000;
  * The upstream token goes in a header to that server and nowhere else.
  */
 export class Upstreams {
+  private get opening(): Buffer[] {
+    return this.deps.keys ?? [this.deps.key];
+  }
+
   /** One refresh per vault entry at a time: refresh tokens may be single use. */
   private readonly refreshing = new Map<string, Promise<StoredTokens>>();
 
   constructor(
-    private readonly deps: { db: Db; home: FhirClient; key: Buffer; fetch?: typeof fetch },
+    private readonly deps: {
+      db: Db;
+      home: FhirClient;
+      /** Seals (the current vault key). */
+      key: Buffer;
+      /** Opens (current first, then previous keys during a rotation). */
+      keys?: Buffer[];
+      fetch?: typeof fetch;
+    },
   ) {}
 
   async target(
@@ -35,7 +47,7 @@ export class Upstreams {
     homePatientRef: string,
   ): Promise<Target | Refuse> {
     if (!serverId) return { fhir: this.deps.home, patientRef: homePatientRef };
-    const { db, key } = this.deps;
+    const { db } = this.deps;
     const [server] = await db.select().from(fhirServers).where(eq(fhirServers.id, serverId));
     if (!server?.enabled) {
       return refuse(
@@ -55,7 +67,7 @@ export class Upstreams {
     const bind = `${person.id}|${server.id}`;
     let tokens: StoredTokens;
     try {
-      tokens = JSON.parse(unseal(key, entry.tokensSealed, bind)) as StoredTokens;
+      tokens = JSON.parse(unseal(this.opening, entry.tokensSealed, bind)) as StoredTokens;
     } catch {
       return refuse(
         0,
@@ -100,7 +112,7 @@ export class Upstreams {
     const { db, key } = this.deps;
     if (!old.refresh_token) throw new Error("no refresh token");
     const secret = server.clientSecretSealed
-      ? unseal(key, server.clientSecretSealed, `server|${server.id}`)
+      ? unseal(this.opening, server.clientSecretSealed, `server|${server.id}`)
       : null;
     const got: SmartTokens = await refreshTokens(
       { tokenUrl: server.tokenUrl, clientId: server.clientId, clientSecret: secret },

@@ -19,6 +19,7 @@ export * from "./receipts.ts";
 export * from "./schema.ts";
 export * from "./seed.ts";
 export * from "./vault.ts";
+export * from "./vault-rotate.ts";
 export { schema };
 
 export const DEFAULT_DATABASE_URL = "postgres://aipass:aipass@127.0.0.1:5433/aipass";
