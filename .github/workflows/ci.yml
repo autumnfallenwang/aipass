@@ -76,3 +76,19 @@ jobs:
         if: failure()
         run: docker compose logs --tail=200
 
+  helm:
+    name: Helm chart (lint + strict schema check; nothing is deployed, D12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint
+        run: >-
+          helm lint deploy/helm/aipass
+          --set secrets.databaseUrl=postgres://x
+          --set secrets.betterAuthSecret=lint-only-secret-xxxxxxxxxxxxxxxxxx
+          --set secrets.vaultKey=lint-only-vault-key-yyyyyyyyyyyyyyyyyy
+      - name: Render and validate every resource
+        run: |
+          helm template aipass deploy/helm/aipass --set secrets.existingSecret=aipass --set ingress.enabled=true --set demo=true \
+            | docker run --rm -i ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary -
+

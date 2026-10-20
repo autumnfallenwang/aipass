@@ -1,0 +1,9 @@
+apiVersion: v2
+name: aipass
+description: A pass for AI in healthcare. Agents see only what the person allows, ask before changing anything, and can be stopped anytime.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/autumnfallenwang/aipass
+sources:
+  - https://github.com/autumnfallenwang/aipass

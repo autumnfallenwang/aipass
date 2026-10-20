@@ -1,0 +1,40 @@
+{{- if .Values.ingress.enabled }}
+{{- $web := urlParse .Values.publicUrl }}
+{{- $gw := urlParse .Values.gatewayUrl }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "aipass.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tlsSecret }}
+  tls:
+    - hosts: [{{ $web.hostname | quote }}, {{ $gw.hostname | quote }}]
+      secretName: {{ . }}
+  {{- end }}
+  rules:
+    # People's browsers: only the web app. It passes /api/* to the api inside.
+    - host: {{ $web.hostname | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: web, port: { number: 3000 } }
+    # AI clients: only the gateway.
+    - host: {{ $gw.hostname | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: gateway, port: { number: 3002 } }
+{{- end }}

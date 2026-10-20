@@ -1,0 +1,49 @@
+# aipass on Kubernetes (S7). The project builds and lints this chart but deploys
+# nothing itself (D12). Postgres and the FHIR server are yours: point at them.
+#
+# One release per namespace: the web image reaches the api at http://api:3001,
+# so the api's Service is named `api`.
+
+image:
+  registry: ghcr.io/autumnfallenwang
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Where people's browsers reach the web app (the one public origin, D10).
+publicUrl: https://aipass.example.org
+# Where AI clients reach the gateway. Passes name it as their audience.
+gatewayUrl: https://gateway.aipass.example.org
+# aipass's own FHIR server (records, agents' Devices, AuditEvents).
+fhirBaseUrl: http://hapi:8080/fhir
+orgName: Sunrise Clinic
+# Load the synthetic demo (Maria, John, two agents). Never with real records.
+demo: false
+
+secrets:
+  # Use a Secret you manage, with keys DATABASE_URL, BETTER_AUTH_SECRET,
+  # AIPASS_VAULT_KEY and optionally AIPASS_VAULT_KEY_PREVIOUS, FHIR_AUTHORIZATION.
+  existingSecret: ""
+  # Or let the chart create one (values end up in your Helm release; prefer the above).
+  databaseUrl: ""
+  betterAuthSecret: ""
+  vaultKey: ""
+  vaultKeyPrevious: ""
+  fhirAuthorization: ""
+
+replicas:
+  api: 1
+  gateway: 1
+  web: 1
+
+resources:
+  api: { requests: { cpu: 100m, memory: 192Mi }, limits: { memory: 512Mi } }
+  gateway: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 384Mi } }
+  web: { requests: { cpu: 100m, memory: 192Mi }, limits: { memory: 512Mi } }
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # TLS secret covering both hosts.
+  tlsSecret: ""

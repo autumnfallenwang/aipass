@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    {{- include "aipass.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.replicas.web }}
+  selector:
+    matchLabels:
+      {{- include "aipass.selector" (dict "root" . "component" "web") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aipass.selector" (dict "root" . "component" "web") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "aipass.podSecurity" . | nindent 8 }}
+      containers:
+        - name: web
+          image: {{ include "aipass.image" (dict "root" . "name" "web") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources.web | nindent 12 }}
+          securityContext:
+            {{- include "aipass.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            # Next writes its cache here; the rest of the filesystem is read-only.
+            - name: next-cache
+              mountPath: /app/apps/web/.next/cache
+      volumes:
+        - name: next-cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    {{- include "aipass.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "aipass.selector" (dict "root" . "component" "web") | nindent 4 }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

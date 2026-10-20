@@ -1,0 +1,12 @@
+aipass {{ .Chart.AppVersion }} is installed in {{ .Release.Namespace }}.
+
+  People and admins:  {{ .Values.publicUrl }}   (Service web:3000)
+  AI clients:         {{ .Values.gatewayUrl }}/agents/<agent-id>/mcp   (Service gateway:3002)
+
+The first account created on the web app becomes the admin: create it now.
+{{- if .Values.demo }}
+
+demo: true loaded SYNTHETIC patients. Never point a demo install at real records.
+{{- end }}
+
+Guides: https://github.com/autumnfallenwang/aipass/tree/main/docs/guides
