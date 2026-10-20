@@ -8,7 +8,7 @@
  *     --email maria@example.org --password maria-demo-password --untick "see your vital signs"
  */
 import { spawn, spawnSync } from "node:child_process";
-import { parseArgs } from "node:util";
+import { parseArgs, stripVTControlCharacters } from "node:util";
 import { chromium } from "@playwright/test";
 
 const { values: a } = parseArgs({
@@ -50,11 +50,7 @@ const authorizeUrl = await new Promise<string>((resolve, reject) => {
   const t = setTimeout(() => reject(new Error(`no authorize URL in:\n${out}`)), 60_000);
   login.stdout.on("data", (d: Buffer) => {
     // Strip terminal escapes, including OSC 8 hyperlinks (which repeat the URL).
-    out += d
-      .toString()
-      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
-      .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "")
-      .replace(/\r/g, "");
+    out += stripVTControlCharacters(d.toString()).replaceAll("\r", "");
     const m = out.match(/(http:\/\/\S+\/api\/auth\/oauth2\/authorize\?\S+)/);
     if (m?.[1]) {
       clearTimeout(t);
