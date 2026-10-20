@@ -1,0 +1,698 @@
+{
+  "resourceType": "Bundle",
+  "id": "aipass-fixture-maria",
+  "type": "transaction",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "maria",
+        "meta": { "tag": [{ "system": "https://aipass.dev/fixture", "code": "synthetic" }] },
+        "identifier": [{ "system": "https://sunrise-clinic.example/mrn", "value": "SC-100234" }],
+        "name": [{ "use": "official", "family": "Santos", "given": ["Maria", "Elena"] }],
+        "telecom": [
+          { "system": "phone", "value": "555-0142", "use": "mobile" },
+          { "system": "email", "value": "maria.santos@example.org" }
+        ],
+        "gender": "female",
+        "birthDate": "1972-03-14",
+        "address": [
+          {
+            "line": ["18 Harbor View Rd"],
+            "city": "Springfield",
+            "state": "MA",
+            "postalCode": "01105"
+          }
+        ],
+        "maritalStatus": { "text": "Married" }
+      },
+      "request": { "method": "PUT", "url": "Patient/maria" }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "maria-a1c-1",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "4548-4",
+              "display": "Hemoglobin A1c/Hemoglobin.total in Blood"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "effectiveDateTime": "2026-01-15",
+        "valueQuantity": {
+          "value": 8.1,
+          "unit": "%",
+          "system": "http://unitsofmeasure.org",
+          "code": "%"
+        }
+      },
+      "request": { "method": "PUT", "url": "Observation/maria-a1c-1" }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "maria-a1c-2",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "4548-4",
+              "display": "Hemoglobin A1c/Hemoglobin.total in Blood"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "effectiveDateTime": "2026-05-20",
+        "valueQuantity": {
+          "value": 7.4,
+          "unit": "%",
+          "system": "http://unitsofmeasure.org",
+          "code": "%"
+        }
+      },
+      "request": { "method": "PUT", "url": "Observation/maria-a1c-2" }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "maria-a1c-3",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "4548-4",
+              "display": "Hemoglobin A1c/Hemoglobin.total in Blood"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "effectiveDateTime": "2026-09-28",
+        "valueQuantity": {
+          "value": 6.9,
+          "unit": "%",
+          "system": "http://unitsofmeasure.org",
+          "code": "%"
+        }
+      },
+      "request": { "method": "PUT", "url": "Observation/maria-a1c-3" }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "maria-glucose-1",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "1558-6",
+              "display": "Fasting glucose [Mass/volume] in Serum or Plasma"
+            }
+          ],
+          "text": "Fasting glucose"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "effectiveDateTime": "2026-09-28",
+        "valueQuantity": {
+          "value": 132,
+          "unit": "mg/dL",
+          "system": "http://unitsofmeasure.org",
+          "code": "mg/dL"
+        }
+      },
+      "request": { "method": "PUT", "url": "Observation/maria-glucose-1" }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "maria-ldl-1",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "13457-7",
+              "display": "Cholesterol in LDL [Mass/volume] in Serum or Plasma by calculation"
+            }
+          ],
+          "text": "LDL cholesterol"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "effectiveDateTime": "2026-09-28",
+        "valueQuantity": {
+          "value": 104,
+          "unit": "mg/dL",
+          "system": "http://unitsofmeasure.org",
+          "code": "mg/dL"
+        }
+      },
+      "request": { "method": "PUT", "url": "Observation/maria-ldl-1" }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "maria-bp-1",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "85354-9",
+              "display": "Blood pressure panel with all children optional"
+            }
+          ],
+          "text": "Blood pressure"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "effectiveDateTime": "2026-09-28",
+        "component": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8480-6",
+                  "display": "Systolic blood pressure"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "value": 134,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8462-4",
+                  "display": "Diastolic blood pressure"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "value": 84,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          }
+        ]
+      },
+      "request": { "method": "PUT", "url": "Observation/maria-bp-1" }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "maria-weight-1",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [{ "system": "http://loinc.org", "code": "29463-7", "display": "Body weight" }],
+          "text": "Body weight"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "effectiveDateTime": "2026-09-28",
+        "valueQuantity": {
+          "value": 78.2,
+          "unit": "kg",
+          "system": "http://unitsofmeasure.org",
+          "code": "kg"
+        }
+      },
+      "request": { "method": "PUT", "url": "Observation/maria-weight-1" }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "maria-med-metformin",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "861004",
+              "display": "metformin hydrochloride 1000 MG Oral Tablet"
+            }
+          ],
+          "text": "Metformin 1000 mg tablet"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "authoredOn": "2025-02-10",
+        "dosageInstruction": [{ "text": "1 tablet by mouth twice daily with meals" }]
+      },
+      "request": { "method": "PUT", "url": "MedicationRequest/maria-med-metformin" }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "maria-med-lisinopril",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "314076",
+              "display": "lisinopril 10 MG Oral Tablet"
+            }
+          ],
+          "text": "Lisinopril 10 mg tablet"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "authoredOn": "2025-06-02",
+        "dosageInstruction": [{ "text": "1 tablet by mouth once daily" }]
+      },
+      "request": { "method": "PUT", "url": "MedicationRequest/maria-med-lisinopril" }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "maria-med-sertraline",
+        "meta": {
+          "security": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "PSY",
+              "display": "psychiatry information sensitivity"
+            }
+          ]
+        },
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "312940",
+              "display": "sertraline 50 MG Oral Tablet"
+            }
+          ],
+          "text": "Sertraline 50 mg tablet"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "authoredOn": "2026-03-04",
+        "dosageInstruction": [{ "text": "1 tablet by mouth once daily" }]
+      },
+      "request": { "method": "PUT", "url": "MedicationRequest/maria-med-sertraline" }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "maria-cond-diabetes",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "problem-list-item"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "44054006",
+              "display": "Diabetes mellitus type 2"
+            }
+          ],
+          "text": "Type 2 diabetes"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "onsetDateTime": "2019-08-01"
+      },
+      "request": { "method": "PUT", "url": "Condition/maria-cond-diabetes" }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "maria-cond-hypertension",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "problem-list-item"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "38341003",
+              "display": "Hypertensive disorder"
+            }
+          ],
+          "text": "High blood pressure"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "onsetDateTime": "2021-04-12"
+      },
+      "request": { "method": "PUT", "url": "Condition/maria-cond-hypertension" }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "maria-cond-depression",
+        "meta": {
+          "security": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "PSY",
+              "display": "psychiatry information sensitivity"
+            }
+          ]
+        },
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "problem-list-item"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "35489007",
+              "display": "Depressive disorder"
+            }
+          ],
+          "text": "Depression"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "onsetDateTime": "2026-02-20"
+      },
+      "request": { "method": "PUT", "url": "Condition/maria-cond-depression" }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "maria-cond-alcohol",
+        "meta": {
+          "security": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "ETH",
+              "display": "substance abuse information sensitivity"
+            },
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "42CFRPart2",
+              "display": "42 CFR Part 2"
+            }
+          ]
+        },
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "resolved"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "problem-list-item"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            { "system": "http://snomed.info/sct", "code": "7200002", "display": "Alcoholism" }
+          ],
+          "text": "Alcohol use disorder, in remission"
+        },
+        "subject": { "reference": "Patient/maria" },
+        "onsetDateTime": "2015-05-01",
+        "abatementDateTime": "2017-09-01"
+      },
+      "request": { "method": "PUT", "url": "Condition/maria-cond-alcohol" }
+    },
+    {
+      "resource": {
+        "resourceType": "DocumentReference",
+        "id": "maria-note-diabetes-visit",
+        "status": "current",
+        "type": {
+          "coding": [
+            { "system": "http://loinc.org", "code": "11506-3", "display": "Progress note" }
+          ],
+          "text": "Diabetes follow-up visit note"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note"
+              }
+            ]
+          }
+        ],
+        "subject": { "reference": "Patient/maria" },
+        "date": "2026-09-28T10:30:00Z",
+        "description": "Diabetes follow-up visit note",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "RGlhYmV0ZXMgZm9sbG93LXVwLiBBMWMgNi45JSwgZG93biBmcm9tIDcuNCUuIENvbnRpbnVlIG1ldGZvcm1pbiAxMDAwIG1nIHR3aWNlIGRhaWx5LiBXYWxrIDMwIG1pbnV0ZXMgYSBkYXkuIFJlY2hlY2sgaW4gMyBtb250aHMu"
+            }
+          }
+        ]
+      },
+      "request": { "method": "PUT", "url": "DocumentReference/maria-note-diabetes-visit" }
+    },
+    {
+      "resource": {
+        "resourceType": "DocumentReference",
+        "id": "maria-note-therapy",
+        "meta": {
+          "security": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "PSY",
+              "display": "psychiatry information sensitivity"
+            },
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+              "code": "R",
+              "display": "restricted"
+            }
+          ]
+        },
+        "status": "current",
+        "type": {
+          "coding": [
+            { "system": "http://loinc.org", "code": "11488-4", "display": "Consult note" }
+          ],
+          "text": "Therapy session note"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note"
+              }
+            ]
+          }
+        ],
+        "subject": { "reference": "Patient/maria" },
+        "date": "2026-10-08T15:00:00Z",
+        "description": "Therapy session note",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U1lOVEhFVElDIFRFU1QgREFUQS4gVGhlcmFweSBzZXNzaW9uIDYuIE1vb2QgaW1wcm92aW5nLiBDb250aW51ZSB3ZWVrbHkgc2Vzc2lvbnMu"
+            }
+          }
+        ]
+      },
+      "request": { "method": "PUT", "url": "DocumentReference/maria-note-therapy" }
+    },
+    {
+      "resource": {
+        "resourceType": "Appointment",
+        "id": "maria-appt-diabetes",
+        "status": "booked",
+        "serviceType": [{ "text": "Diabetes follow-up" }],
+        "description": "Diabetes follow-up with Dr. Okafor",
+        "start": "2026-11-05T14:00:00Z",
+        "end": "2026-11-05T14:30:00Z",
+        "participant": [
+          {
+            "actor": { "reference": "Patient/maria", "display": "Maria Santos" },
+            "status": "accepted"
+          }
+        ]
+      },
+      "request": { "method": "PUT", "url": "Appointment/maria-appt-diabetes" }
+    },
+    {
+      "resource": {
+        "resourceType": "Appointment",
+        "id": "maria-appt-eye",
+        "status": "booked",
+        "serviceType": [{ "text": "Diabetic eye exam" }],
+        "description": "Retinal eye exam",
+        "start": "2026-12-03T16:00:00Z",
+        "end": "2026-12-03T16:45:00Z",
+        "participant": [
+          {
+            "actor": { "reference": "Patient/maria", "display": "Maria Santos" },
+            "status": "accepted"
+          }
+        ]
+      },
+      "request": { "method": "PUT", "url": "Appointment/maria-appt-eye" }
+    },
+    {
+      "resource": {
+        "resourceType": "Appointment",
+        "id": "maria-appt-therapy",
+        "meta": {
+          "security": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "PSY",
+              "display": "psychiatry information sensitivity"
+            }
+          ]
+        },
+        "status": "booked",
+        "serviceType": [{ "text": "Therapy session" }],
+        "description": "Weekly therapy session",
+        "start": "2026-10-29T15:00:00Z",
+        "end": "2026-10-29T15:50:00Z",
+        "participant": [
+          {
+            "actor": { "reference": "Patient/maria", "display": "Maria Santos" },
+            "status": "accepted"
+          }
+        ]
+      },
+      "request": { "method": "PUT", "url": "Appointment/maria-appt-therapy" }
+    }
+  ]
+}

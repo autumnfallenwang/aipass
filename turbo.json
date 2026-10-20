@@ -1,0 +1,20 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "tasks": {
+    "dev": {
+      "persistent": true,
+      "cache": false
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "typecheck": {},
+    "test": {},
+    "test:integration": {
+      "cache": false
+    }
+  },
+  "globalEnv": ["DATABASE_URL", "FHIR_BASE_URL", "NODE_ENV"]
+}

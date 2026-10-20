@@ -9,9 +9,9 @@ _This one file is both the plan and the tracker. When a stage changes state, upd
 A clinic admin decides what each AI agent may see and do (its **role**). The person an agent acts for, such as Maria the patient, agrees to it (her **grant**). The agent carries a short-lived **pass** that names both the agent and the person. Every request goes through the **gateway**, which re-checks the role, the grant and the record's sensitivity labels *live*. It shows the agent only its role's view of the chart, and it holds any change until the person approves it with their passkey. Each request leaves a **receipt**, in plain English and in the FHIR record's own audit log.
 
 **Maria example used in every stage:**
-- **Diabetes Coach:** labs, vitals and medications; may *propose* a glucose reading.
+- **Diabetes Coach:** labs, vitals, medications, conditions and visit notes; may *propose* a glucose reading.
 - **Scheduling Assistant:** her name, phone number and appointments only.
-- **Neither agent** ever sees her therapy notes.
+- **Neither agent** ever sees anything labelled sensitive: her therapy notes, depression, antidepressant, past alcohol treatment, or her therapy appointments. The data is in [`fixtures/`](../fixtures/README.md).
 
 ---
 
@@ -35,7 +35,8 @@ A clinic admin decides what each AI agent may see and do (its **role**). The per
         │  pass (Bearer)        │ live reads: agent? role? grant?
         ▼                       ▼
         ┌──────────────── apps/gateway (Hono) ───────────────┐
-        │ MCP server · verify pass · policy · role view filter│
+        │ MCP server per agent: /agents/{id}/mcp              │
+        │ verify pass · policy · role view filter             │
         │ propose→approve→commit (S5) · receipts + AuditEvent  │
         └───────────────────────┬────────────────────────────┘
                                 ▼
@@ -48,7 +49,7 @@ A clinic admin decides what each AI agent may see and do (its **role**). The per
 aipass/
   apps/web          Next.js App Router: admin UI + 3 person pages
   apps/api          Hono + Better Auth 1.7: the "front office"
-  apps/gateway      Hono + MCP TS SDK: the "door guard" (the only thing AI clients talk to)
+  apps/gateway      Hono + MCP TS SDK v2: the "door guard" (the only thing AI clients talk to)
   packages/shared   Zod schemas + types shared by all apps
   packages/policy   pure TypeScript decision engine: NO framework imports, so it can be tested on its own
   packages/fhir     FHIR helpers: resource groups, labels, patient compartment, AuditEvent/Provenance builders
@@ -60,18 +61,20 @@ aipass/
 
 **Stack:**
 - Turborepo + pnpm
-- TypeScript everywhere
+- TypeScript 6.0 everywhere (Node 24 LTS in CI)
 - Hono + Zod
 - Next.js
 - Postgres + Drizzle
 - Better Auth 1.7
 - `jose`
-- MCP TypeScript SDK (protocol 2025-11-25)
+- MCP TypeScript SDK v2: `@modelcontextprotocol/server` 2.3 (protocol 2026-07-28, with 2025-11-25 served as a stateless fallback)
 - `@simplewebauthn/server` (S5)
 - Vitest + Biome
 - Playwright (S2+)
 
-**Dev ports:** web 3000 · api 3001 · gateway 3002 · HAPI 8080 · Postgres 5432.
+**Dev ports:** web 3000 · api 3001 · gateway 3002 · HAPI 8080 · Postgres **5433** (not 5432, so it doesn't collide with other local Postgres instances).
+
+**One gateway URL per agent.** Each agent the admin registers gets its own MCP endpoint, `http://gateway/agents/{agent-id}/mcp`, and that URL is the pass's audience (`aud`). A pass for one agent can't be used at another agent's door, and an AI client that shares one OAuth client id across all installs (Claude Code does) still lands on a specific agent.
 
 ---
 
@@ -83,7 +86,7 @@ aipass/
 | **Role** | The ceiling: what that kind of AI may ever do | `roles` | id, name, rules[] = {group, read, propose, write}, patient_fields (field mask), locked_labels[] |
 | **Person** | Who the agent acts for | `persons` (+ Better Auth user from S3) | id, display_name, fhir_ref (`Patient/…` or `Practitioner/…`) |
 | **Grant** | The person's "yes", inside the role | `grants` | person_id, agent_id, groups[] (⊆ role), status, granted_at, revoked_at |
-| **Pass** | The short-lived badge the agent carries | not stored (only its `jti` appears in receipts) | JWT: iss, `sub`=person, `act.sub`=agent, `aud`=gateway, `patient`, exp ≤ 5 min, jti |
+| **Pass** | The short-lived badge the agent carries | not stored (only its `jti` appears in receipts) | JWT: iss, `sub`=person, `act.sub`=agent, `aud`=that agent's gateway URL, `patient`, exp ≤ 5 min, jti |
 | **Approval** (S5) | The person's OK for one exact change | `approvals` | id, agent_id, person_id, action, payload_hash, status (`pending`/`approved`/`used`/`denied`/`expired`), expires_at |
 | **Receipt** | One line per request | `receipts` | ts, agent_id, person_id, action, target, decision, reason, pass_jti, prev_hash, hash, auditevent_id |
 
@@ -155,24 +158,24 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 
 **Plan: spikes, each with a written prediction:**
 
-| # | Question | Prediction | Fallback if wrong |
-|---|---|---|---|
-| SP1 | Can Claude Code connect to Better Auth 1.7's OAuth provider (DCR or CIMD + PKCE), and can we put our own claims (`act`, `patient`) into the access token? | Yes to both. The package ships DCR/CIMD, DPoP and PRM (checked v1.7.11 locally) | api mints our pass in its own endpoint after OAuth; Claude fetches it via `headersHelper` |
-| SP2 | Does MCP TS SDK 1.32.1 serve Streamable HTTP at protocol 2025-11-25, with elicitation? | Yes for 2025-11-25. 2026-07-28 is **not** in the SDK yet | Target 2025-11-25; add 2026-07-28 when the SDK ships it |
-| SP3 | Does HAPI FHIR (Docker) accept `Device`/`AuditEvent`/`Provenance` writes and search by `_security`? | Yes | Filter labels in the gateway after fetch (we do this anyway) |
-| SP4 | Can we build fixtures: Maria (our hand-written demo patient) + 3 Synthea patients, with a `PSY`-labelled note and an `ETH`-labelled condition? | Yes, with a load script | Hand-written bundles |
+| # | Question | Prediction | Fallback if wrong | Result (2026-10-19) |
+|---|---|---|---|---|
+| SP1 | Can Claude Code connect to Better Auth 1.7's OAuth provider (DCR or CIMD + PKCE), and can we put our own claims (`act`, `patient`) into the access token? | Yes to both. The package ships DCR/CIMD, DPoP and PRM (checked v1.7.11 locally) | api mints our pass in its own endpoint after OAuth; Claude fetches it via `headersHelper` | ✅ **Yes.** Real Claude Code 2.1.301 used **CIMD** (`client_id=https://claude.ai/oauth/claude-code-client-metadata`) + PKCE S256 + RFC 8707 `resource`. Better Auth issued a JWT whose `act` and `patient` came from an `extensions[].claims.accessToken` contributor, with a 300 s TTL set per resource. The login was driven headlessly with `claude mcp login --no-browser`. **Surprise:** every Claude Code install shares one client id, which led to one gateway URL per agent (§2) |
+| SP2 | Does the MCP TS SDK serve Streamable HTTP, and at which protocol, with elicitation? | v1.32.1: yes for 2025-11-25; 2026-07-28 **not** in the SDK yet | Target 2025-11-25; add 2026-07-28 when the SDK ships it | ❌ **Prediction wrong (for the better).** SDK **v2** (`@modelcontextprotocol/server` 2.3.1) is now the stable line and implements **2026-07-28**. `createMcpHandler` serves 2026-07-28 and falls back to stateless 2025-11-25 from the same server factory. Real Claude Code negotiated 2026-07-28 (`server/discover`) and `headersHelper` worked. Elicitation (`input_required`) is in the protocol, but headless `claude -p` gives no human answer and retries to the 10-round limit, so S5 returns an approval link instead |
+| SP3 | Does HAPI FHIR (Docker) accept `Device`/`AuditEvent`/`Provenance` writes and search by `_security`? | Yes | Filter labels in the gateway after fetch (we do this anyway) | ✅ **Yes.** HAPI v8.12.0-2 accepted all three. `_security=…\|PSY` and `_security:not=…` both work, and `AuditEvent?agent=Device/…` and `?patient=` both find the event. The gateway still filters after fetch (rule 2: fail closed) |
+| SP4 | Can we build fixtures: Maria (our hand-written demo patient) + Synthea patients, with a `PSY`-labelled note and an `ETH`-labelled condition? | Yes, with a load script | Hand-written bundles | ✅ **Yes.** Maria and John are hand-written; 2 Synthea patients are trimmed by `scripts/trim-synthea.ts` (seed 20261019). `pnpm fixtures:load` loads all 4 in about 1.5 s and is idempotent |
 
 **Build:**
-- [ ] Turborepo + pnpm monorepo: `apps/{web,api,gateway}`, `packages/{shared,policy,fhir}`, Biome, Vitest, tsconfig
-- [ ] `deploy/compose.yaml`: Postgres + HAPI FHIR R4; `pnpm dev` starts everything
-- [ ] `fixtures/` + `pnpm fixtures:load` (Maria, John, 2 Synthea patients; labelled therapy note + substance-use condition)
-- [ ] GitHub Actions: lint, typecheck and unit tests on every push; integration job with HAPI as a service container
-- [ ] Spike notes SP1–SP4 recorded in the Log (prediction → result)
+- [x] Turborepo + pnpm monorepo: `apps/{web,api,gateway}`, `packages/{shared,policy,fhir}`, Biome, Vitest, tsconfig
+- [x] `deploy/compose.yaml`: Postgres + HAPI FHIR R4; `pnpm dev` starts everything (services → fixtures → apps)
+- [x] `fixtures/` + `pnpm fixtures:load` (Maria, John, 2 Synthea patients; labelled therapy note + substance-use condition)
+- [x] GitHub Actions: lint, typecheck and unit tests on every push; integration job with Postgres + HAPI (started from `deploy/compose.yaml`, so CI and local use one definition)
+- [x] Spike results SP1–SP4 recorded in the table above and in the Log
 
 **Validate:**
-- [ ] A fresh clone, then `pnpm i && pnpm dev`, gives all apps healthy (`/health` 200) and HAPI returns Maria
+- [ ] A fresh clone, then `pnpm i && pnpm dev`, gives all apps healthy (`/health` 200) and HAPI returns Maria (`pnpm smoke` checks all four)
 - [ ] CI is green on `main`
-- [ ] All four spikes answered; any fallback chosen is written into S1/S3
+- [x] All four spikes answered; the consequences are written into S1 (one URL per agent), S3 (CIMD first) and S5 (approval link)
 
 ---
 
@@ -181,7 +184,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 **Goal:** a real Claude reads Maria's labs through the gateway, is refused her therapy note with a plain-English reason, and is cut off on its next call when stopped. There's no UI yet; roles, agents and grants come from a seed script.
 
 **Plan:**
-- **The pass:** api signs JWTs with its own key and publishes `/.well-known/jwks.json`. A dev command mints passes: `pnpm pass --agent coach --person maria`. Claude Code gets one through a `headersHelper` script that calls this command.
+- **The pass:** api signs JWTs with its own key and publishes `/.well-known/jwks.json`. A dev command mints passes: `pnpm pass --agent diabetes-coach --person maria`. The pass's `aud` is that agent's own gateway URL. Claude Code gets one through a `headersHelper` script that calls this command (SP2 confirmed `headersHelper` works with the gateway).
 - **Gateway order:** verify the pass offline (signature, aud, exp) → read agent/role/grant live → decide → fetch from FHIR with the gateway's own credential → **filter the response** to the role view → write a receipt.
 - **The FHIR query surface is the hard part.** Block `$everything`, `_include`/`_revinclude` across groups, chained search and GraphQL in S1. Paging links must keep the filter (they are re-checked on each page).
 - **MCP tools:**
@@ -263,7 +266,8 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 
 **Plan:**
 - api becomes the OAuth authorization server for AI clients (Better Auth OAuth provider; SP1 result).
-  - **Client identity:** CIMD where the client supports it, DCR as fallback.
+  - **Client identity:** CIMD where the client supports it (Claude Code does: SP1), DCR as fallback.
+  - **Which agent:** the client asks for a token for one agent's gateway URL (RFC 8707 `resource`). The api only issues it if the admin linked that client to that agent (Better Auth `enforcePerClientResources`).
   - **Flow:** authorization code + PKCE.
   - **Access token** = the pass: `sub`=Maria, `act.sub`=agent, `aud`=gateway, ≤ 5 min. Refresh tokens are revocable.
 - **Consent page** (person-facing): *"Diabetes Coach (approved by Sunrise Clinic) wants to: see your labs ☑, vitals ☑, medications ☑, propose glucose readings ☑."* Maria can untick, and the result is stored as her grant.
@@ -330,7 +334,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 
 **Plan:**
 - **Tools:** `propose_observation` and `commit_change(approval_id)`.
-- **Proposal step:** validate the resource → canonicalize (RFC 8785 JSON over normalized FHIR) → hash → create a `pending` approval → return an approval link. Use MCP elicitation if SP2 confirmed it; otherwise return the link in the tool result.
+- **Proposal step:** validate the resource → canonicalize (RFC 8785 JSON over normalized FHIR) → hash → create a `pending` approval → return an approval link **in the tool result** (SP2: headless clients can't answer elicitation, and a passkey needs a real page anyway).
 - **Approve page:**
   - shows the change in plain words;
   - WebAuthn assertion with user verification, where challenge = H(payload_hash ‖ approval_id ‖ nonce);
@@ -400,7 +404,6 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - [ ] Optional, evidence-driven:
   - SMART **Permission Tickets** as the grant format
   - **Cedar**, if the rules have outgrown plain TypeScript
-  - MCP 2026-07-28, once the SDK supports it
   - a Helm chart for Kubernetes deploys
 - [ ] Write-up: "Who did this, for whom? Identity for AI agents on FHIR", with S4 scorecards
 - [ ] Tag `v1.0.0`
@@ -427,7 +430,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 
 | Stage | State | Dates | Note |
 |---|---|---|---|
-| S0 Foundation + spikes | ⬜ next | Oct 20–25 | |
+| S0 Foundation + spikes | 🟡 in progress | Oct 19– | skeleton, fixtures and all 4 spikes done; waiting for CI on `main` |
 | S1 The guard (read-only) | ⬜ | Oct 26 – Nov 3 | |
 | S2 Admin UI v1 → v0.1 | ⬜ | Nov 3–12 | public release |
 | S3 Real login + person's yes → v0.2 | ⬜ | Nov 13–24 | |
@@ -444,4 +447,9 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-19 | **S0 started.** Postgres moved to host port 5433 (5432 collides with other local Postgres). TypeScript 6.0.3, not 7.0 (TS 7 is the native port with no JS API yet, which Next.js type-checking needs) |
+| 2026-10-19 | **SP4 ✅** Maria + John hand-written, 2 Synthea patients trimmed; load is idempotent (~1.5 s) |
+| 2026-10-19 | **SP3 ✅** HAPI v8.12.0-2 takes Device/AuditEvent/Provenance; `_security` and `_security:not` searches work |
+| 2026-10-19 | **SP2 ❌ prediction miss (good news):** MCP SDK v2 (`@modelcontextprotocol/server` 2.3.1) implements 2026-07-28 and Claude Code 2.1.301 negotiates it. We switch to v2 (D8). Headless elicitation loops, so S5 uses an approval link |
+| 2026-10-19 | **SP1 ✅** Claude Code → Better Auth 1.7.11 via CIMD + PKCE + `resource`; `act`/`patient` claims added by an OAuth-provider extension. Shared CIMD client id → one gateway URL per agent (D9) |
 | 2026-10-19 | Plan written. Stack, admin-first UI and one-file tracking decided (D5–D7). MCP TS SDK 1.32.1 found to cover protocol 2025-11-25 but not yet 2026-07-28 → SP2 |

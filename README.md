@@ -16,6 +16,25 @@ It works with any login system (identity provider) and any FHIR server, and you 
 
 ## Status
 
-**Pre-code.** The plan and decisions are in [`docs/`](docs/). Start with [the plan](docs/PLAN.md).
+**Early development.** The plan, progress and decisions are in [`docs/`](docs/). Start with [the plan](docs/PLAN.md).
 
 Demos use synthetic data only.
+
+## Run it locally
+
+You need Node 22+ (24 LTS recommended), pnpm 10 and Docker.
+
+```sh
+pnpm install
+pnpm dev      # starts Postgres + HAPI FHIR, loads the synthetic patients, then runs the apps
+pnpm smoke    # in another terminal: checks that everything is healthy
+```
+
+| Service | URL |
+|---|---|
+| Admin UI (web) | http://localhost:3000 |
+| api | http://localhost:3001 |
+| gateway | http://localhost:3002 |
+| HAPI FHIR | http://localhost:8080/fhir |
+
+On first start, HAPI takes about a minute to boot. `pnpm dev` waits for it.

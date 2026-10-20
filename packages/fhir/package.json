@@ -1,0 +1,17 @@
+{
+  "name": "@aipass/fhir",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run --passWithNoTests --exclude '**/*.int.test.ts'",
+    "test:integration": "vitest run .int.test --passWithNoTests"
+  },
+  "dependencies": {
+    "@aipass/shared": "workspace:*"
+  }
+}

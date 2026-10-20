@@ -1,0 +1,38 @@
+{
+  "name": "aipass",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A pass for AI in healthcare: a permission gateway between AI agents and FHIR.",
+  "type": "module",
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm services:up && pnpm fixtures:load && turbo dev",
+    "services:up": "docker compose -f deploy/compose.yaml up -d --wait",
+    "services:down": "docker compose -f deploy/compose.yaml down",
+    "build": "turbo build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "turbo typecheck && tsc -p .",
+    "test": "turbo test",
+    "test:integration": "turbo test:integration --concurrency=1",
+    "fixtures:load": "tsx scripts/load-fixtures.ts",
+    "smoke": "tsx scripts/smoke.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^24.12.0",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.9",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
+  }
+}
