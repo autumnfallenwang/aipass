@@ -18,7 +18,7 @@ const VERB: Record<Action | "connect", [past: string, attempt: string]> = {
   connect: ["connected", "connect"],
   read: ["read", "read"],
   propose: ["proposed", "propose"],
-  write: ["changed", "change"],
+  write: ["added", "add"],
 };
 
 function possessive(name: string): string {

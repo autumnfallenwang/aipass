@@ -12,8 +12,9 @@ Let AI help with your health records, on your terms: it sees only what you allow
 - **Writes a receipt for every request**, refusals included. Each one is a plain-English sentence plus an AuditEvent in the FHIR record's own audit log, naming both the AI and the person.
 - **Stops instantly.** When the admin clicks Stop, the AI's very next call is refused (measured: under 0.1 s).
 - **Lets the person decide.** An AI app signs in with OAuth. The person sees exactly what it asks for, can untick anything, and can revoke it later on their "My AIs" page.
-- **Checks itself, and others.** `pnpm check` tries 12 ways past an agent→FHIR system and grades it, for example the wrong patient, a forged pass, a mental-health record, or an `_include` side door. It is proven by planting each defect in aipass, and has been run against two open-source FHIR MCP servers: [docs/check](docs/check/README.md).
-- *Coming next:* changes that wait for the person's passkey (S5). See the [plan](docs/PLAN.md).
+- **Checks itself, and others.** `pnpm check` tries 16 ways past an agent→FHIR system and grades it, for example the wrong patient, a forged pass, a mental-health record, or an `_include` side door. It is proven by planting each defect in aipass, and has been run against two open-source FHIR MCP servers: [docs/check](docs/check/README.md).
+- **Asks before changing anything.** An AI may only *propose* a change. The person sees exactly that change and approves it with their passkey. Only then is it written, with a FHIR Provenance saying the AI wrote it, for whom, and with whose approval: [docs/demo-s5.md](docs/demo-s5.md).
+- *Coming next:* any login system and any FHIR server (S6). See the [plan](docs/PLAN.md).
 
 It works with any login system (identity provider) and any FHIR server, and you host it yourself. The project itself is developed and tested on localhost only: it runs no hosted instance, and where you deploy it is up to you.
 
@@ -85,6 +86,6 @@ pnpm check              # the health check against your running gateway
 
 ## Status
 
-**v0.2** (OAuth login for AI apps, the person's consent and "My AIs"). The plan, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
+**v0.3** (OAuth login for AI apps, the person's consent and "My AIs", and passkey-approved changes). The plan, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
 
 No licence has been chosen yet, so all rights are reserved for now (see [decisions](docs/decisions.md)).

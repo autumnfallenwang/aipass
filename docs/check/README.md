@@ -28,7 +28,10 @@ The probes act **for Maria**, the synthetic patient. The target's FHIR server mu
 | `revoked_grant` | keep working after the person revokes | the person's "no" is ignored |
 | `refusal_audited` | a refused request leaves an audit record | refusals are invisible |
 | `receipt_names_both` | an allowed request's audit names the AI **and** the person | nobody can tell who did what for whom |
-| `self_approve`, `approval_replay`, `payload_swap` | approved writes | *arrive with S5* |
+| `unapproved_write` | write a reading with no approval at all | the AI changes the record on its own |
+| `self_approve` | the agent approves its own change with its own credential | the "person's approval" is the agent's |
+| `approval_replay` | use one approval twice | one yes becomes many writes |
+| `payload_swap` | change the value after it was approved (133 → 313) | the person approved something else |
 
 How each probe reports:
 - **pass:** it was stopped.
@@ -45,13 +48,13 @@ Leaks are judged by **markers**: strings from the fixtures that can only appear 
 
 ## Proving the inspector
 
-A test suite that never fails proves nothing. `AIPASS_BROKEN=<defect>` starts the aipass gateway with one check switched off. The gateway refuses this when `NODE_ENV=production`.
+A test suite that never fails proves nothing. `AIPASS_BROKEN=<defect>` starts aipass with one check switched off. The gateway refuses this when `NODE_ENV=production`, and so does the api for `approve_auth`.
 
 The self-test (`packages/check/test/planted.int.test.ts`, part of `pnpm test:integration`) starts the gateway once correct and once per planted defect:
 
 | Planted defect | Must be caught by | Probes that failed | Grade |
 |---|---|---|---|
-| (none) | — | all 12 pass | A |
+| (none) | — | all 16 pass | A |
 | `require_pass` | `no_pass` | fails: no_pass | D |
 | `signature` | `forged_pass` | fails: forged_pass | B |
 | `expiry` | `expired_pass` | fails: expired_pass | B |
@@ -64,17 +67,21 @@ The self-test (`packages/check/test/planted.int.test.ts`, part of `pnpm test:int
 | `include` | `include_escape` | fails: include_escape | D |
 | `audit_refusals` | `refusal_audited` | fails: refusal_audited | B |
 | `audit_person` | `receipt_names_both` | fails: receipt_names_both | B |
+| `approval` | `unapproved_write` | fails: unapproved_write, self_approve, approval_replay, payload_swap | C |
+| `replay` | `approval_replay` | fails: approval_replay | B |
+| `hash` | `payload_swap` | fails: payload_swap | B |
+| `approve_auth` | `self_approve` | fails: self_approve | B |
 
 Results:
-- Every planted defect is caught by its own probe and by no other probe.
-- The correct gateway passes all 12, so there are no false alarms.
-- The leak defects drop the grade to D. The others drop it to B.
+- Every one of the 16 planted defects is caught by its own probe.
+- Only `approval` also trips other probes, because with no approval check, self-approval, replay and swap all get through too.
+- The correct gateway passes all 16, so there are no false alarms.
 
 ## Targets
 
 | Adapter | How it drives the target |
 |---|---|
-| `aipass` | white-box: signs passes with the api's key, registers two temporary probe agents, stops and revokes in the database, and reads AuditEvents from FHIR |
+| `aipass` | white-box: signs passes with the api's key, registers two temporary probe agents, stops and revokes in the database, approves as the person in the database, reads AuditEvents from FHIR, and deletes any reading it wrote |
 | `wso2` | generic `search` / `read` tools |
 | `fhirhydrant` | one tool per resource type, plus its JSONL audit file |
 
@@ -84,8 +91,8 @@ To add a target, write a preset in `packages/check/src/targets/bridge.ts` (how t
 
 | Target | Configuration | Grade |
 |---|---|---|
-| [aipass gateway](scorecards/aipass.md) | `pnpm dev` | **A** (12/12) |
-| [wso2/fhir-mcp-server](scorecards/wso2-fhir-mcp-server.md) `2a915a4` | documented local mode, no authorization | **F** (0 passed, 3 failed, 9 missing) |
-| [faulkj/fhirHydrant](scorecards/fhirhydrant.md) `1a24376` | documented unauthenticated mode, file audit on | **F** (0 passed, 4 failed, 8 missing) |
+| [aipass gateway](scorecards/aipass.md) | `pnpm dev` | **A** (16/16) |
+| [wso2/fhir-mcp-server](scorecards/wso2-fhir-mcp-server.md) `2a915a4` | documented local mode, no authorization | **F** (0 passed, 4 failed, 12 missing) |
+| [faulkj/fhirHydrant](scorecards/fhirhydrant.md) `1a24376` | documented unauthenticated mode (read-only by default), file audit on | **F** (1 passed, 4 failed, 11 missing) |
 
 The two external projects are **FHIR bridges**: they let an AI reach FHIR, and do that well. Per-person identity isn't something they claim in these modes; each scorecard says exactly what was and wasn't tested. The cards show the gap that an identity layer such as aipass fills in front of them.

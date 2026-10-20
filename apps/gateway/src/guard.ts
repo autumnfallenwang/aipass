@@ -15,6 +15,7 @@ import {
 import { decideRequest, decideResource, type Refuse, refuse, type Verdict } from "@aipass/policy";
 import {
   ACTIONS,
+  type Action,
   GROUPS,
   type Group,
   type PassClaims,
@@ -71,7 +72,7 @@ export type ReadOutcome =
     }
   | (Refuse & { sentence: string; receiptId: string });
 
-type Resolved = {
+export type Resolved = {
   ctx: CallContext;
   agentName: string;
   person: { id: string; name: string; ref: string } | null;
@@ -91,10 +92,7 @@ export class Guard {
   ) {}
 
   /** Loads agent, role, person and grant live, and pins the patient. */
-  private async resolve(
-    caller: Caller,
-    override?: RoleOverride,
-  ): Promise<Resolved & { pin: Verdict }> {
+  async resolve(caller: Caller, override?: RoleOverride): Promise<Resolved & { pin: Verdict }> {
     const loaded = await loadCallContext(this.deps.db, caller.agentId, caller.claims.sub);
     const ctx: CallContext = override
       ? {
@@ -156,13 +154,16 @@ export class Guard {
     return { ctx, agentName: ctx.agent?.name ?? caller.agentId, person, patientRef, pin };
   }
 
-  async read(caller: Caller, req: ReadRequest, override?: RoleOverride): Promise<ReadOutcome> {
-    if (override && caller.mode !== "preview")
-      throw new Error("role overrides are for previews only");
-    const r = await this.resolve(caller, override);
+  /** Rules 1–4 for this caller, plus the patient pin, with any planted defects applied. */
+  verdictFor(
+    caller: Caller,
+    r: Resolved & { pin: Verdict },
+    group: Group,
+    action: Action,
+  ): Verdict {
     const { ctx } = r;
     const broken = this.deps.broken ?? new Set<Defect>();
-    let verdict = decideRequest({
+    const verdict = decideRequest({
       pass: { ok: true },
       agent: ctx.agent
         ? {
@@ -186,8 +187,18 @@ export class Guard {
         : ctx.grant
           ? { status: ctx.grant.status, permissions: ctx.grant.permissions }
           : null,
-      request: { group: req.group, action: "read" },
+      request: { group, action },
     });
+    return verdict.decision === "allow" ? r.pin : verdict;
+  }
+
+  async read(caller: Caller, req: ReadRequest, override?: RoleOverride): Promise<ReadOutcome> {
+    if (override && caller.mode !== "preview")
+      throw new Error("role overrides are for previews only");
+    const r = await this.resolve(caller, override);
+    const { ctx } = r;
+    const broken = this.deps.broken ?? new Set<Defect>();
+    const verdict = this.verdictFor(caller, r, req.group, "read");
     const facts = (res: Resource) => {
       const f = factsOf(res);
       if (broken.has("compartment")) f.patientRefs = [r.patientRef ?? ""];
@@ -195,7 +206,6 @@ export class Guard {
       if (broken.has("include") && f.group !== null) f.group = req.group;
       return f;
     };
-    if (verdict.decision === "allow") verdict = r.pin;
     if (verdict.decision === "refuse" || !r.patientRef || !r.person) {
       const v =
         verdict.decision === "refuse" ? verdict : refuse(4, "person_unknown", "unknown person");

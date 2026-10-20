@@ -143,3 +143,62 @@ export const passKeys = pgTable("pass_keys", {
   createdAt: createdAt(),
   retiredAt: timestamp("retired_at", { withTimezone: true }),
 });
+
+export type ApprovalStatus = "pending" | "approved" | "used" | "denied" | "expired";
+
+/**
+ * The person's OK for one exact change (S5). The agent proposes; the approver
+ * signs a passkey challenge bound to the payload hash; the agent commits the
+ * same payload within two minutes, once.
+ */
+export const approvals = pgTable(
+  "approvals",
+  {
+    id: text("id").primaryKey(),
+    agentId: text("agent_id").notNull(),
+    /** Who the change is for (the pass's person). */
+    personId: text("person_id").notNull(),
+    /** Who must approve: the patient by default, or a named person (approval rules). */
+    approverPersonId: text("approver_person_id").notNull(),
+    action: text("action").$type<"create">().notNull(),
+    group: text("group_name").notNull(),
+    resourceType: text("resource_type").notNull(),
+    /** The exact resource that will be written. */
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    /** sha256 over the RFC 8785 canonical JSON of `payload`. */
+    payloadHash: text("payload_hash").notNull(),
+    /** What the approver is shown, in plain words. */
+    summary: text("summary").notNull(),
+    /** Mixed into the passkey challenge so one approval can't sign another. */
+    nonce: text("nonce").notNull(),
+    status: text("status").$type<ApprovalStatus>().notNull().default("pending"),
+    passJti: text("pass_jti"),
+    createdAt: createdAt(),
+    /** A pending proposal is dropped after this. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedByUserId: text("approved_by_user_id"),
+    credentialId: text("credential_id"),
+    deniedAt: timestamp("denied_at", { withTimezone: true }),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    /** `Observation/<id>` once written. */
+    resultRef: text("result_ref"),
+  },
+  (t) => [index("approvals_person_idx").on(t.personId, t.status)],
+);
+
+/** Who approves which proposals: per role and group. No row means "the patient". */
+export const approvalRules = pgTable(
+  "approval_rules",
+  {
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    group: text("group_name").notNull(),
+    approverPersonId: text("approver_person_id").references(() => persons.id, {
+      onDelete: "cascade",
+    }),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.roleId, t.group] })],
+);

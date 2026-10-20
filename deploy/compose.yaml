@@ -28,6 +28,9 @@ services:
       hapi.fhir.allow_external_references: "true"
       hapi.fhir.default_page_size: 20
       hapi.fhir.max_page_size: 100
+      # Searches always run fresh: tests write and delete records, and a reused
+      # cached result would show what was there a minute ago.
+      hapi.fhir.reuse_cached_search_results_millis: 0
     ports:
       - "127.0.0.1:${AIPASS_HAPI_PORT:-8080}:8080"
 

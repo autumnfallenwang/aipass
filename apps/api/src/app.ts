@@ -7,6 +7,7 @@ import {
 import { type Context, Hono } from "hono";
 import * as z from "zod";
 import { adminRoutes } from "./admin.ts";
+import { approvalRoutes } from "./approvals.ts";
 import { type Auth, adminExists } from "./auth.ts";
 import { config } from "./config.ts";
 import { publicJwks } from "./keys.ts";
@@ -58,6 +59,8 @@ export function createApp(deps: ApiDeps) {
   });
 
   app.route("/api/admin", adminRoutes({ db, auth, fhir: deps.fhir, fetch: deps.fetch }));
+  // approvals before the general person routes: both live under /api/person
+  app.route("/api/person/approvals", approvalRoutes({ db, auth }));
   app.route("/api/person", personRoutes({ db, auth }));
 
   // Dev passes (S1): only when AIPASS_DEV_PASSES=1, and only from this machine.

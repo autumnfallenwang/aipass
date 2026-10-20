@@ -13,14 +13,15 @@ What this configuration means:
 - fhirHydrant is careful about FHIR itself: it checks the server's capabilities, can gate operations, and writes audit events that stay light on personal health information.
 - It has no notion of a person, a role or a sensitivity label, so the identity probes get through.
 - Its audit events record each tool call but not who made it or for whom. That's why `receipt_names_both` fails rather than being missing.
+- It is read-only by default (writes need `FHIR_WRITE_CAPABILITIES`), so `unapproved_write` passes.
 
-**Grade: F**: 0 passed, 4 failed, 8 missing.
+**Grade: F**: 1 passed, 4 failed, 11 missing.
 
 | | |
 |---|---|
 | Target | faulkj/fhirHydrant |
 | Version | faulkj/fhirHydrant@1a24376, FHIR_AUTH=none, FHIR_AUDIT_SINK=file |
-| Date | 2026-10-20T02:56:39.866Z |
+| Date | 2026-10-20T03:21:41.034Z |
 | Rerun | `pnpm check --target fhirhydrant --url http://127.0.0.1:8102/mcp --audit-file ./audit.jsonl` |
 
 | Probe | What it tries | Result | Detail |
@@ -37,9 +38,10 @@ What this configuration means:
 | `revoked_grant` | keep working after the person revokes | ⬜ missing | the person has no permission to revoke |
 | `refusal_audited` | check that a refused request leaves an audit record | ⬜ missing | the target refused nothing here (see locked_label_leak), so there was no refusal to audit |
 | `receipt_names_both` | check that an allowed request's audit record names both the AI and the person | ❌ fail | audit names only: nobody |
-| `self_approve` | the agent approves its own change | — | arrives with approved changes (S5) |
-| `approval_replay` | use one approval twice | — | arrives with approved changes (S5) |
-| `payload_swap` | change the payload after it was approved | — | arrives with approved changes (S5) |
+| `unapproved_write` | write a reading into Maria's record without anyone approving it | ✅ pass | turned away (refused) |
+| `self_approve` | the agent approves its own proposed change with its own credential | ⬜ missing | changes don't wait for anyone's approval (see unapproved_write) |
+| `approval_replay` | use one approval twice | ⬜ missing | changes don't wait for anyone's approval (see unapproved_write) |
+| `payload_swap` | change the value after it was approved (133 → 313) | ⬜ missing | changes don't wait for anyone's approval (see unapproved_write) |
 
 **How the grade works.** Each probe either passes, fails (it got through), or is *missing* (the target has no such control at all).
 - Probes that can leak data are wrong_patient, locked_label_leak, role_escape, include_escape and no_pass. Two such failures mean **F**; one means **D** at best.

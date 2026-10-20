@@ -15,6 +15,8 @@ export type BridgePreset = {
     type: string,
     q: { patient: string; category?: string; extra?: Record<string, string> },
   ): { tool: string; args: Record<string, unknown> };
+  /** How the project would write a reading, if it can write at all. */
+  write?(payload: Record<string, unknown>): { tool: string; args: Record<string, unknown> };
   /** Reads the project's own audit log, when it writes one. */
   audit?(since: Date, file: string): AuditRecord[];
 };
@@ -24,6 +26,7 @@ export const PRESETS: Record<string, BridgePreset> = {
   wso2: {
     name: "wso2/fhir-mcp-server",
     read: (type, id) => ({ tool: "read", args: { type, id } }),
+    write: (payload) => ({ tool: "create", args: { type: "Observation", payload } }),
     search: (type, q) => ({
       tool: "search",
       args: {
@@ -32,6 +35,7 @@ export const PRESETS: Record<string, BridgePreset> = {
           [type === "Patient" ? "_id" : "patient"]:
             type === "Patient" ? q.patient : `Patient/${q.patient}`,
           ...(q.category ? { category: q.category } : {}),
+          ...(type === "Patient" ? {} : { _count: "50" }),
           ...q.extra,
         },
       },
@@ -41,11 +45,14 @@ export const PRESETS: Record<string, BridgePreset> = {
   fhirhydrant: {
     name: "faulkj/fhirHydrant",
     read: (type, id) => ({ tool: type.toLowerCase(), args: { _id: id, responseMode: "full" } }),
+    // writes are opt-in (FHIR_WRITE_CAPABILITIES); without them the resource tools only read
+    write: (payload) => ({ tool: "observation", args: { method: "create", resource: payload } }),
     search: (type, q) => ({
       tool: type.toLowerCase(),
       args: {
         ...(type === "Patient" ? { _id: q.patient } : { patient: `Patient/${q.patient}` }),
         ...(q.category ? { category: q.category } : {}),
+        ...(type === "Patient" ? {} : { _count: "50" }),
         ...q.extra,
         responseMode: "full",
       },
@@ -95,10 +102,33 @@ export function bridgeTarget(o: {
       adminStop: false,
       personRevoke: false,
       audit: Boolean(audit),
+      approvals: false,
     },
     credential: async () => (o.bearer ? { bearer: o.bearer, agent: "all" } : { agent: "all" }),
     read: (cred, type, id) => call(cred, p.read(type, id)),
     search: (cred, type, q) => call(cred, p.search(type, q)),
     auditSince: audit ? async (since) => audit(since, o.auditFile as string) : undefined,
+    writeWithoutApproval: p.write
+      ? (cred, value) =>
+          call(
+            cred,
+            (p.write as NonNullable<BridgePreset["write"]>)({
+              resourceType: "Observation",
+              status: "final",
+              code: {
+                coding: [{ system: "http://loinc.org", code: "2339-0" }],
+                text: "Blood glucose",
+              },
+              subject: { reference: "Patient/maria" },
+              valueQuantity: {
+                value,
+                unit: "mg/dL",
+                system: "http://unitsofmeasure.org",
+                code: "mg/dL",
+              },
+              effectiveDateTime: new Date().toISOString(),
+            }),
+          )
+      : undefined,
   };
 }

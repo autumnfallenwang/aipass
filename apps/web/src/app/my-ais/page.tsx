@@ -1,7 +1,8 @@
 "use client";
 
 import type { Permission } from "@aipass/shared";
-import { Ban, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Ban, KeyRound, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -136,6 +137,35 @@ function AiCard({ ai, onChange }: { ai: MyAi; onChange: () => void }) {
   );
 }
 
+type Pending = { id: string; agentName: string; summary: string; status: string };
+
+function Approvals() {
+  const list = useApi<Pending[]>("/person/approvals", { pollMs: 3000 });
+  const waiting = (list.data ?? []).filter((p) => p.status === "pending");
+  if (!waiting.length) return null;
+  return (
+    <Card className="border-amber-300" data-testid="pending-approvals">
+      <CardHeader>
+        <CardTitle>Waiting for your OK</CardTitle>
+        <CardDescription>
+          An AI proposed a change. Nothing is written until you approve it with your passkey.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {waiting.map((p) => (
+          <Link
+            key={p.id}
+            href={`/approve/${p.id}`}
+            className="rounded-md border p-3 text-sm hover:bg-muted"
+          >
+            <span className="font-medium">{p.agentName}</span>: {p.summary}
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function MyAisPage() {
   const router = useRouter();
   const data = useApi<{ person: { displayName: string } | null; ais: MyAi[] }>("/person/ais", {
@@ -159,17 +189,31 @@ export default function MyAisPage() {
               : "Your account isn't linked to a patient record yet."}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={async () => {
-            await authClient.signOut();
-            router.replace("/login");
-          }}
-        >
-          <LogOut /> Sign out
-        </Button>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              const res = await authClient.passkey.addPasskey({ name: "aipass" });
+              if (res?.error) toast.error(res.error.message ?? "Couldn't add a passkey");
+              else toast.success("Passkey added. You'll use it to approve changes.");
+            }}
+          >
+            <KeyRound /> Add a passkey
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              await authClient.signOut();
+              router.replace("/login");
+            }}
+          >
+            <LogOut /> Sign out
+          </Button>
+        </div>
       </div>
+      <Approvals />
       {data.data.ais.length === 0 && data.data.person && (
         <p className="text-sm text-muted-foreground">No AI may act for you yet.</p>
       )}

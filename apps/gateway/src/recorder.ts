@@ -11,7 +11,7 @@ export type ReceiptInput = {
   tool: string | null;
   action: Action | "connect";
   group: Group | null;
-  interaction: "search-type" | "read" | "create" | "update";
+  interaction: "search-type" | "read" | "create" | "update" | "operation";
   query?: string;
   decision: "allow" | "refuse";
   rule?: number | null;

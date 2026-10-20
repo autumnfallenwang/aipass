@@ -38,7 +38,7 @@ export type AuditInput = {
   person: { ref: string; name: string } | null;
   /** The patient whose record was touched. */
   patientRef: string | null;
-  interaction: "search-type" | "read" | "create" | "update";
+  interaction: "search-type" | "read" | "create" | "update" | "operation";
   /** e.g. `Observation?category=laboratory` */
   query?: string;
   outcome: "allow" | "refuse";
@@ -51,6 +51,8 @@ export type AuditInput = {
 };
 
 const ACTION: Record<AuditInput["interaction"], string> = {
+  // a proposal is recorded as an operation: nothing is written yet
+  operation: "E",
   "search-type": "E",
   read: "R",
   create: "C",

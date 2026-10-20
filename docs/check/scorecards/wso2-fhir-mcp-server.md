@@ -9,15 +9,15 @@ What this configuration means:
 - The project's own authorization is OAuth against the FHIR server (SMART). In that mode, which patients and records a caller may see is decided by the EHR's token, not by the bridge. That mode wasn't tested here.
 - So this card shows what a FHIR→MCP bridge does *on its own*. It isn't a judgement of the project's OAuth mode.
 
-**What the result means.** The bridge does what it says: it exposes FHIR to an AI faithfully, through generic `search` and `read` tools. It has no notion of a person, a role, a sensitivity label or an agent, so every identity probe gets through or has nothing to test. That is the gap aipass is built to fill, in front of a bridge like this or instead of one.
+**What the result means.** The bridge does what it says: it exposes FHIR to an AI faithfully, through generic `search` and `read` tools. It has no notion of a person, a role, a sensitivity label or an agent, so every identity probe gets through or has nothing to test. Its `create` tool also wrote a reading into Maria's record with no approval (the probe's reading was deleted afterwards). That is the gap aipass is built to fill, in front of a bridge like this or instead of one.
 
-**Grade: F**: 0 passed, 3 failed, 9 missing.
+**Grade: F**: 0 passed, 4 failed, 12 missing.
 
 | | |
 |---|---|
 | Target | wso2/fhir-mcp-server |
 | Version | wso2/fhir-mcp-server@2a915a4 (v0.10.0), FHIR_SERVER_DISABLE_AUTHORIZATION=True |
-| Date | 2026-10-20T02:56:37.923Z |
+| Date | 2026-10-20T03:21:39.334Z |
 | Rerun | `pnpm check --target wso2 --url http://127.0.0.1:8101/mcp` |
 
 | Probe | What it tries | Result | Detail |
@@ -34,9 +34,15 @@ What this configuration means:
 | `revoked_grant` | keep working after the person revokes | ⬜ missing | the person has no permission to revoke |
 | `refusal_audited` | check that a refused request leaves an audit record | ⬜ missing | the target writes no audit record we can read |
 | `receipt_names_both` | check that an allowed request's audit record names both the AI and the person | ⬜ missing | the target writes no audit record we can read |
-| `self_approve` | the agent approves its own change | — | arrives with approved changes (S5) |
-| `approval_replay` | use one approval twice | — | arrives with approved changes (S5) |
-| `payload_swap` | change the payload after it was approved | — | arrives with approved changes (S5) |
+| `unapproved_write` | write a reading into Maria's record without anyone approving it | ❌ fail | written with no approval: {
+  "resourceType": "Observation",
+  "id": "20f8e4a4-e745-476d-a0bc-074623701f2d",
+  "meta": {
+    "versionId": "1",
+    |
+| `self_approve` | the agent approves its own proposed change with its own credential | ⬜ missing | changes don't wait for anyone's approval (see unapproved_write) |
+| `approval_replay` | use one approval twice | ⬜ missing | changes don't wait for anyone's approval (see unapproved_write) |
+| `payload_swap` | change the value after it was approved (133 → 313) | ⬜ missing | changes don't wait for anyone's approval (see unapproved_write) |
 
 **How the grade works.** Each probe either passes, fails (it got through), or is *missing* (the target has no such control at all).
 - Probes that can leak data are wrong_patient, locked_label_leak, role_escape, include_escape and no_pass. Two such failures mean **F**; one means **D** at best.

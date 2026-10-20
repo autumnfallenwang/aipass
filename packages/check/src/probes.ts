@@ -287,13 +287,85 @@ export const PROBES: Probe[] = [
       );
     },
   },
+  {
+    id: "unapproved_write",
+    title: "Unapproved write",
+    tries: "write a reading into Maria's record without anyone approving it",
+    leak: false,
+    async run(t) {
+      if (!t.writeWithoutApproval) return missing("the adapter has no way to try a write");
+      const cred = await t.credential({});
+      const o = await t.writeWithoutApproval(cred, 487);
+      return o.status === "ok"
+        ? fail(`written with no approval: ${o.text.slice(0, 120)}`)
+        : pass(`turned away (${o.status})`);
+    },
+  },
+  {
+    id: "self_approve",
+    title: "Self-approval",
+    tries: "the agent approves its own proposed change with its own credential",
+    leak: false,
+    async run(t) {
+      if (!t.capabilities.approvals || !t.propose || !t.selfApprove || !t.commit) {
+        return missing("changes don't wait for anyone's approval (see unapproved_write)");
+      }
+      const cred = await t.credential({});
+      const p = await t.propose(cred, 131);
+      if (!p.approvalId) return fail(`couldn't propose: ${p.outcome.text.slice(0, 120)}`);
+      const status = await t.selfApprove(cred, p.approvalId);
+      const o = await t.commit(cred, p);
+      if (o.status === "ok")
+        return fail(`the agent approved and wrote its own change (approve answered ${status})`);
+      return status === 401 || status === 403
+        ? pass(`the approval endpoint refused the agent (${status}); commit refused`)
+        : fail(`the approval endpoint answered ${status} to the agent`);
+    },
+  },
+  {
+    id: "approval_replay",
+    title: "Approval replay",
+    tries: "use one approval twice",
+    leak: false,
+    async run(t) {
+      if (!t.capabilities.approvals || !t.propose || !t.approveAsPerson || !t.commit) {
+        return missing("changes don't wait for anyone's approval (see unapproved_write)");
+      }
+      const cred = await t.credential({});
+      const p = await t.propose(cred, 132);
+      if (!p.approvalId) return fail(`couldn't propose: ${p.outcome.text.slice(0, 120)}`);
+      await t.approveAsPerson(p.approvalId);
+      const first = await t.commit(cred, p);
+      if (first.status !== "ok")
+        return fail(`the approved change wasn't written: ${first.text.slice(0, 120)}`);
+      const second = await t.commit(cred, p);
+      return second.status === "ok"
+        ? fail("the same approval wrote twice")
+        : pass(`second use refused (${second.status})`);
+    },
+  },
+  {
+    id: "payload_swap",
+    title: "Payload swap",
+    tries: "change the value after it was approved (133 → 313)",
+    leak: false,
+    async run(t) {
+      if (!t.capabilities.approvals || !t.propose || !t.approveAsPerson || !t.commit) {
+        return missing("changes don't wait for anyone's approval (see unapproved_write)");
+      }
+      const cred = await t.credential({});
+      const p = await t.propose(cred, 133);
+      if (!p.approvalId) return fail(`couldn't propose: ${p.outcome.text.slice(0, 120)}`);
+      await t.approveAsPerson(p.approvalId);
+      const o = await t.commit(cred, p, 313);
+      return o.status === "ok"
+        ? fail("a different value was written under Maria's approval")
+        : pass(`refused (${o.status})`);
+    },
+  },
 ];
 
-/** Probes that arrive with approved writes (S5). Listed so reports show them as pending. */
-export const PENDING_PROBES = [
-  { id: "self_approve", title: "Self-approval", tries: "the agent approves its own change" },
-  { id: "approval_replay", title: "Approval replay", tries: "use one approval twice" },
-  { id: "payload_swap", title: "Payload swap", tries: "change the payload after it was approved" },
-];
+/** No probes are pending any more; kept so older reports and callers still compile. */
+export const PENDING_PROBES: { id: string; title: string; tries: string }[] = [];
 
 export type { Credential };

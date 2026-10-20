@@ -4,6 +4,7 @@ import { agentUrl, GROUPS, type PassClaims, rulesToPermissions } from "@aipass/s
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { Changes } from "./changes.ts";
 import type { GatewayConfig } from "./config.ts";
 import { type Caller, Guard, type RoleOverride } from "./guard.ts";
 import { PassVerifier } from "./pass.ts";
@@ -33,6 +34,7 @@ export function createGateway(deps: GatewayDeps) {
     deps.verifier ?? new PassVerifier(config.gatewayUrl, config.trustedIssuers, undefined, broken);
   const recorder = new Recorder(db, fhir, broken);
   const guard = new Guard({ db, fhir, config, recorder, broken });
+  const changes = new Changes({ db, fhir, config, recorder, guard, broken });
 
   // One handler serves MCP 2026-07-28 and falls back to stateless 2025-11-25.
   // The factory builds a fresh server per request, bound to the verified pass.
@@ -52,6 +54,7 @@ export function createGateway(deps: GatewayDeps) {
         clientId: typeof clientId === "string" ? clientId : undefined,
       },
       broken,
+      changes,
     );
   });
 
@@ -178,7 +181,7 @@ export function createGateway(deps: GatewayDeps) {
     });
   });
 
-  return { app, guard, recorder, fhir };
+  return { app, guard, changes, recorder, fhir };
 }
 
 async function findAgent(db: Db, id: string) {

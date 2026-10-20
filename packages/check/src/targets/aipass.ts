@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { agents, type Db, grants, newId, passKeys, persons, roles } from "@aipass/db";
+import { agents, approvals, type Db, grants, newId, passKeys, persons, roles } from "@aipass/db";
 import {
   ACTIONS,
   agentDeviceId,
@@ -11,7 +11,14 @@ import {
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { type CryptoKey, generateKeyPair, importJWK, type JWK, SignJWT } from "jose";
 import { callTool } from "../mcp.ts";
-import type { AuditRecord, Credential, CredentialRequest, Outcome, Target } from "../types.ts";
+import type {
+  AuditRecord,
+  Credential,
+  CredentialRequest,
+  Outcome,
+  Proposal,
+  Target,
+} from "../types.ts";
 
 export type AipassTargetOptions = {
   db: Db;
@@ -22,11 +29,15 @@ export type AipassTargetOptions = {
   version?: string;
   /** How to reach the gateway (in-process tests pass the app's fetch). */
   fetch?: typeof fetch;
+  /** The public origin the api's approval endpoints live on. */
+  publicUrl?: string;
+  /** How to reach those endpoints (in-process tests pass the api app's fetch). */
+  apiFetch?: typeof fetch;
   /** Which synthetic person the probes act for. Must have a `Patient/…` record with the fixtures. */
   person?: string;
 };
 
-const ALL_READS: Permission[] = GROUPS.map((g) => permission(g, "read"));
+const ALL_READS: Permission[] = [...GROUPS.map((g) => permission(g, "read")), "labs:propose"];
 const EVERYTHING: Permission[] = GROUPS.flatMap((g) => ACTIONS.map((a) => permission(g, a)));
 
 /** The two probe agents the check registers for itself, and removes afterwards. */
@@ -68,6 +79,14 @@ export function aipassTarget(o: AipassTargetOptions): Target {
     );
   };
 
+  // Readings the write probes manage to write; removed again in teardown.
+  const written = new Set<string>();
+  const remember = (o: Outcome): Outcome => {
+    for (const m of o.text.matchAll(/\((Observation\/[A-Za-z0-9\-.]+)\)/g))
+      if (m[1]) written.add(m[1]);
+    return o;
+  };
+
   const urlOf = (cred: Credential) => agentUrl(o.gatewayUrl, CHECK_AGENTS[cred?.agent ?? "all"].id);
 
   return {
@@ -79,6 +98,7 @@ export function aipassTarget(o: AipassTargetOptions): Target {
       adminStop: true,
       personRevoke: true,
       audit: true,
+      approvals: true,
     },
 
     async setup() {
@@ -89,7 +109,12 @@ export function aipassTarget(o: AipassTargetOptions): Target {
         {
           id: CHECK_AGENTS.all.roleId,
           name: "Health check (all groups)",
-          rules: GROUPS.map((group) => ({ group, read: true, propose: false, write: false })),
+          rules: GROUPS.map((group) => ({
+            group,
+            read: true,
+            propose: group === "labs",
+            write: false,
+          })),
           patientFields: ["name"],
         },
         {
@@ -144,6 +169,11 @@ export function aipassTarget(o: AipassTargetOptions): Target {
     },
 
     async teardown() {
+      for (const ref of written) {
+        await fetch(`${fhir}/Provenance?target=${ref}`, { method: "DELETE" });
+        await fetch(`${fhir}/${ref}`, { method: "DELETE" });
+      }
+      written.clear();
       const ids = Object.values(CHECK_AGENTS).map((a) => a.id);
       await db.delete(grants).where(inArray(grants.agentId, ids));
       await db.delete(agents).where(inArray(agents.id, ids));
@@ -192,7 +222,9 @@ export function aipassTarget(o: AipassTargetOptions): Target {
       const tool = toolFor(type, query.category);
       if (!tool) return { status: "refused", text: `no tool searches ${type}` };
       // aipass takes the patient from the pass, never from the request.
-      return callTool(urlOf(cred), cred?.bearer, tool, { ...query.extra }, o.fetch);
+      const args: Record<string, unknown> = { ...query.extra };
+      if (tool !== "get_patient_summary") args.limit = 50;
+      return callTool(urlOf(cred), cred?.bearer, tool, args, o.fetch);
     },
 
     async stopAgent() {
@@ -212,6 +244,78 @@ export function aipassTarget(o: AipassTargetOptions): Target {
         .update(grants)
         .set({ status: "active", revokedAt: null })
         .where(and(eq(grants.personId, person), eq(grants.agentId, CHECK_AGENTS.all.id)));
+    },
+
+    async writeWithoutApproval(cred, value): Promise<Outcome> {
+      // a well-formed approval id that was never issued
+      return remember(
+        await callTool(
+          urlOf(cred),
+          cred?.bearer,
+          "commit_change",
+          {
+            approval_id: `apr_${randomUUID()}`,
+            measure: "blood_glucose",
+            value,
+            effective: new Date().toISOString(),
+          },
+          o.fetch,
+        ),
+      );
+    },
+
+    async propose(cred, value): Promise<Proposal> {
+      const outcome = await callTool(
+        urlOf(cred),
+        cred?.bearer,
+        "propose_observation",
+        { measure: "blood_glucose", value },
+        o.fetch,
+      );
+      const args = outcome.text.match(/with exactly: (\{.*\})/)?.[1];
+      const commitArgs = args ? (JSON.parse(args) as Record<string, unknown>) : undefined;
+      return { outcome, approvalId: commitArgs?.approval_id as string | undefined, commitArgs };
+    },
+
+    async approveAsPerson(approvalId) {
+      await db
+        .update(approvals)
+        .set({
+          status: "approved",
+          approvedAt: new Date(),
+          approvedByUserId: "aipass-health-check",
+        })
+        .where(eq(approvals.id, approvalId));
+    },
+
+    async commit(cred, p, value): Promise<Outcome> {
+      if (!p.commitArgs) return { status: "error", text: "nothing to commit" };
+      return remember(
+        await callTool(
+          urlOf(cred),
+          cred?.bearer,
+          "commit_change",
+          { ...p.commitArgs, ...(value === undefined ? {} : { value }) },
+          o.fetch,
+        ),
+      );
+    },
+
+    async selfApprove(cred, approvalId): Promise<number> {
+      const base = (o.publicUrl ?? "http://localhost:3000").replace(/\/$/, "");
+      const res = await (o.apiFetch ?? fetch)(
+        `${base}/api/person/approvals/${approvalId}/approve`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${cred?.bearer ?? ""}`,
+            "content-type": "application/json",
+            origin: base,
+          },
+          body: "{}",
+        },
+      );
+      return res.status;
     },
 
     async auditSince(since: Date): Promise<AuditRecord[]> {

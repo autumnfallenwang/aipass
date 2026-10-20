@@ -1,6 +1,8 @@
+import { MEASURE_NAMES } from "@aipass/fhir";
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import type { Defect } from "./broken.ts";
+import type { Changes } from "./changes.ts";
 import type { Caller, Guard, ReadOutcome, ReadRequest } from "./guard.ts";
 
 const INSTRUCTIONS = `You are connected to a patient's health record through aipass.
@@ -63,6 +65,7 @@ export function buildServer(
   guard: Guard,
   caller: Caller,
   broken: ReadonlySet<Defect> = new Set(),
+  changes?: Changes,
 ): McpServer {
   // Planted defect "include" (S4 self-test only): unknown arguments are let
   // through, and `_include`/`_revinclude` are passed on to FHIR.
@@ -229,5 +232,90 @@ export function buildServer(
       }),
   );
 
+  if (changes) registerChangeTools(server, changes, caller, object);
   return server;
+}
+
+const change = {
+  measure: z.enum(MEASURE_NAMES as [string, ...string[]]).describe("What was measured"),
+  value: z
+    .number()
+    .describe("The reading, in the measure's unit (blood_glucose: mg/dL, body_weight: kg)"),
+  effective: z.iso
+    .datetime({ offset: true })
+    .optional()
+    .describe("When it was measured (ISO date-time). Defaults to now"),
+};
+
+/** S5: propose a change, then commit it once the person has approved it with their passkey. */
+function registerChangeTools(
+  server: McpServer,
+  changes: Changes,
+  caller: Caller,
+  object: typeof z.strictObject,
+) {
+  server.registerTool(
+    "propose_observation",
+    {
+      title: "Propose a reading",
+      description:
+        "Proposes adding a reading (blood glucose, body weight) to the patient's record. Nothing is written yet: the patient must approve this exact change with their passkey, then call commit_change.",
+      inputSchema: object(change),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ measure, value, effective }) => {
+      const o = await changes.propose(caller, {
+        measure: measure as keyof typeof import("@aipass/fhir").MEASURES,
+        value,
+        effective: effective ?? new Date().toISOString(),
+      });
+      if (o.decision === "refuse") return refusedResult(o.reason);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: [
+              `Proposed (nothing written yet): ${o.summary}.`,
+              `${o.approverName} must approve it with their passkey here: ${o.approveUrl}`,
+              `The proposal expires at ${o.expiresAt.toISOString()}. Once approved, call commit_change within 2 minutes with exactly: ${JSON.stringify(o.commitArgs)}`,
+            ].join("\n"),
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    "commit_change",
+    {
+      title: "Commit an approved change",
+      description:
+        "Writes a proposed reading once the patient has approved it. Pass the approval_id and exactly the same values that were proposed.",
+      inputSchema: object({ approval_id: z.string().regex(/^apr_[0-9a-f-]{36}$/), ...change }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ approval_id, measure, value, effective }) => {
+      const o = await changes.commit(caller, approval_id, {
+        measure: measure as keyof typeof import("@aipass/fhir").MEASURES,
+        value,
+        effective: effective ?? "",
+      });
+      if (o.decision === "refuse") return refusedResult(o.reason);
+      return {
+        content: [{ type: "text" as const, text: `Written: ${o.summary} (${o.ref}).` }],
+      };
+    },
+  );
+}
+
+function refusedResult(reason: string): ToolResult {
+  return {
+    isError: true,
+    content: [
+      {
+        type: "text",
+        text: `REFUSED: ${reason}.\nThis was checked by aipass and recorded. Tell the user why; don't retry.`,
+      },
+    ],
+  };
 }

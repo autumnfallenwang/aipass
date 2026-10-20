@@ -21,6 +21,8 @@ export type GatewayConfig = {
   fhirHeaders: Record<string, string>;
   databaseUrl: string;
   trustedIssuers: TrustedIssuer[];
+  /** The public origin people's browsers use (approval links point here). */
+  publicUrl: string;
   /** The authorization server advertised in Protected Resource Metadata. */
   authorizationServers: string[];
   /** Signs paging tokens so an agent can't edit them. */
@@ -51,6 +53,7 @@ export function loadConfig(env = process.env): GatewayConfig {
     fhirHeaders: env.FHIR_AUTHORIZATION ? { authorization: env.FHIR_AUTHORIZATION } : {},
     databaseUrl: env.DATABASE_URL ?? "postgres://aipass:aipass@127.0.0.1:5433/aipass",
     trustedIssuers: issuers,
+    publicUrl,
     authorizationServers: [`${publicUrl}/api/auth`],
     pageSecret: env.PAGE_SECRET ? Buffer.from(env.PAGE_SECRET, "utf8") : randomBytes(32),
     maxPageSize: 50,

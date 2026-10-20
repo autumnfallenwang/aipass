@@ -53,6 +53,7 @@ if (a.target === "aipass") {
     gatewayUrl: (process.env.GATEWAY_URL ?? "http://localhost:3002").replace(/\/$/, ""),
     passIssuer: (process.env.API_URL ?? "http://localhost:3001").replace(/\/$/, ""),
     fhirBaseUrl: process.env.FHIR_BASE_URL ?? "http://127.0.0.1:8080/fhir",
+    publicUrl: process.env.PUBLIC_URL ?? process.env.WEB_URL ?? "http://localhost:3000",
     version: a.version ?? gitVersion(),
   });
 } else if (a.target && a.target in PRESETS) {

@@ -3,7 +3,10 @@
  * time, and the probe for that defect must fail, while a clean gateway must
  * pass every probe (no false alarms). Runs in-process against Postgres + HAPI.
  */
+import { createApp } from "@aipass/api/app";
+import { createAuth } from "@aipass/api/auth";
 import { createDb, passKeys, runMigrations, seedDemo } from "@aipass/db";
+import { FhirClient } from "@aipass/fhir";
 import { createGateway } from "@aipass/gateway";
 import { DEFECTS, type Defect } from "@aipass/gateway/broken";
 import { loadConfig } from "@aipass/gateway/config";
@@ -34,6 +37,10 @@ const CATCHES: Record<Defect, string> = {
   include: "include_escape",
   audit_refusals: "refusal_audited",
   audit_person: "receipt_names_both",
+  approval: "unapproved_write",
+  replay: "approval_replay",
+  hash: "payload_swap",
+  approve_auth: "self_approve",
 };
 
 let made: ReturnType<typeof createDb>;
@@ -64,6 +71,8 @@ beforeAll(async () => {
 afterAll(async () => made?.close());
 
 async function check(defects: Defect[]) {
+  // the api reads its planted defect at request time
+  process.env.AIPASS_BROKEN = defects.join(",");
   const config = {
     ...loadConfig({
       ...process.env,
@@ -81,12 +90,19 @@ async function check(defects: Defect[]) {
     config.broken,
   );
   const { app } = createGateway({ db: made.db, config, verifier });
+  const api = createApp({
+    db: made.db,
+    auth: createAuth(made.db),
+    fhir: new FhirClient({ baseUrl: FHIR }),
+  });
   const target = aipassTarget({
     db: made.db,
     gatewayUrl: GATEWAY,
     passIssuer: ISSUER,
     fhirBaseUrl: FHIR,
     fetch: async (input, init) => app.fetch(new Request(input, init)),
+    publicUrl: "http://localhost:3000",
+    apiFetch: async (input, init) => api.fetch(new Request(input, init)),
   });
   return runChecks(target);
 }
@@ -100,6 +116,7 @@ describe("the health check catches every planted defect", () => {
     expect(notPassing.map((x) => `${x.id}: ${x.detail}`)).toEqual([]);
     expect(r.grade).toBe("A");
     matrix.push(`| (none) | — | all ${r.results.length} pass | ${r.grade} |`);
+    expect(r.results).toHaveLength(16);
   });
 
   it.each(DEFECTS)("catches the planted defect %s", async (defect) => {

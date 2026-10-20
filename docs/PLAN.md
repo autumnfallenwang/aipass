@@ -350,9 +350,10 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - **Acceptance tests A1–A8.** The rule behind them: *an approval is real only if nothing the agent holds can produce it.*
 
 **Build:**
-- [ ] approvals table + api endpoints + approve page + admin Approvals screen
-- [ ] gateway tools + hashing + commit checks + Provenance
-- [ ] Check probes `self_approve`, `approval_replay`, `payload_swap` switched on
+- [x] **SP5 answered: yes.** Better Auth stores each passkey's credential id, public key (base64) and counter, and itself verifies with `@simplewebauthn/server`. aipass verifies approvals against the same rows with `@simplewebauthn/server` 14, but with `requireUserVerification: true` (Better Auth's own sign-in doesn't require it)
+- [x] approvals + approval_rules tables; api endpoints (approver's list, details plus a challenge, approve, deny; a browser session only, never a pass); `/approve/[id]` page; pending approvals and "Add a passkey" on "My AIs"; admin **Approvals** screen (who approves, per role and group: the patient or a named person, plus recent approvals)
+- [x] gateway tools `propose_observation` and `commit_change`. The agent names a measure and a value, never raw FHIR: a small catalog (blood glucose, body weight) with ranges. RFC 8785 canonical JSON → sha256; challenge = sha256(hash ‖ approval id ‖ nonce); the approval is used atomically; Provenance (`author` = AI Device, `onBehalfOf` = Maria, `verifier` = approver, entity = approval id and hash) + AuditEvent. The proposal waits 10 min; the commit must come within 2 min of approval. The role grid's **Change** permission stays reserved: every write goes through an approval (rule 7)
+- [x] Check probes `self_approve`, `approval_replay`, `payload_swap` switched on, plus `unapproved_write`. Four more planted defects (`approval`, `replay`, `hash`, and `approve_auth` in the api), all caught
 
 **Validate (A1–A8):**
 
@@ -367,8 +368,10 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 | A7 | Maria taps **Deny** | receipt "REFUSED: Maria said no"; nothing written |
 | A8 | Approved write | Observation + Provenance(`who`=AI Device, `onBehalfOf`=Maria) + AuditEvent all present |
 
-- [ ] Manual demo on a real phone
-- [ ] Tag `v0.3.0`
+- [x] All of A1–A8 automated in `apps/web/e2e/writes.spec.ts` (Chrome virtual authenticator). A2 rewrites the page's options so an unverified assertion actually reaches the server, because the browser refuses a "required" ceremony on its own
+- [x] Real Claude Code 2.1.301: proposed glucose 130; Maria approved with a (virtual) passkey; the resumed session committed it; Provenance as above ([demo-s5.md](demo-s5.md))
+- [ ] ⏸ **Manual demo on a real phone: waiting for the owner.** It needs a person and a phone. It works on localhost through Chrome's cross-device passkeys (a QR code, then Bluetooth), with no deployment (D12); steps in [demo-s5.md](demo-s5.md#2-give-maria-a-passkey)
+- [x] Tag `v0.3.0`
 
 ---
 
@@ -441,8 +444,8 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 | S2 Admin UI v1 → v0.1 | ✅ done | Oct 19 | v0.1.0 tagged; release check by an independent agent (a person's run still wanted) |
 | S3 Real login + person's yes → v0.2 | ✅ done | Oct 19 | real Claude Code over OAuth; v0.2.0 |
 | S4 Health check | ✅ done | Oct 19 | 12/12 planted defects caught; 2 external scorecards; filing issues waits for the owner |
-| S5 Approved changes → v0.3 | 🟡 next | Dec 3–17 | |
-| S6 Any environment → v0.4 | ⬜ | Dec 17 – Jan 14 | |
+| S5 Approved changes → v0.3 | ✅ done | Oct 19 | A1–A8 green; real Claude proposed → passkey → commit; a real-phone run waits for the owner |
+| S6 Any environment → v0.4 | 🟡 next | Dec 17 – Jan 14 | |
 | S7 Hardening → v1.0 | ⬜ | Jan 14 – Feb | |
 
 _States: ⬜ not started · 🟡 in progress · ✅ done · ❌ blocked (say by what)._
@@ -453,6 +456,8 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-19 | **S5 ✅ v0.3.0.** SP5: yes (same passkey rows; we add required user verification). 16 probes, 16 planted defects, all caught; scorecards updated (wso2 wrote a reading with no approval; fhirHydrant is read-only by default) |
+| 2026-10-19 | **Surprise:** HAPI reuses cached search results for about a minute. After tests deleted records, a "newest first" page still listed them, which hid Maria's A1c from a probe. The dev compose file now sets `reuse_cached_search_results_millis: 0`, and the check cleans up every reading it writes |
 | 2026-10-19 | **D12:** develop and test on localhost only; no deployment to the owner's k3s. Deployment artifacts are for adopters |
 | 2026-10-19 | **S4 ✅** The inspector catches all 12 planted defects one-to-one and raises no false alarms. Scorecards: aipass A, wso2/fhir-mcp-server F, fhirHydrant F (in their documented local modes). Issue drafts are ready; filing waits for the owner. the-momentum/fhir-mcp-server was set aside: it needs Pinecone, a LOINC account and an embedding model to run |
 | 2026-10-19 | **S3 ✅ v0.2.0.** Real Claude Code connected with only the gateway URL (CIMD + PKCE + `resource`), Maria consented without vitals, and the gateway refused vitals with her reason. Revoking on "My AIs" ended the session. 13 e2e tests green |

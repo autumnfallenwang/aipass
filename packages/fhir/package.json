@@ -12,6 +12,7 @@
     "test:integration": "vitest run .int.test --passWithNoTests --no-file-parallelism"
   },
   "dependencies": {
-    "@aipass/shared": "workspace:*"
+    "@aipass/shared": "workspace:*",
+    "canonicalize": "^5.1.0"
   }
 }

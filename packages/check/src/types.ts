@@ -37,6 +37,15 @@ export type Capabilities = {
   personRevoke: boolean;
   /** Writes an audit record we can read back. */
   audit: boolean;
+  /** Changes wait for the person's approval. */
+  approvals: boolean;
+};
+
+/** A proposed change, as the probes make it: always "blood glucose <value> mg/dL for Maria". */
+export type Proposal = {
+  outcome: Outcome;
+  approvalId?: string;
+  commitArgs?: Record<string, unknown>;
 };
 
 /**
@@ -65,6 +74,16 @@ export interface Target {
   restoreGrant?(): Promise<void>;
   /** Audit records the target wrote since `since`. */
   auditSince?(since: Date): Promise<AuditRecord[]>;
+  /** Try to write a reading for Maria with no approval at all. */
+  writeWithoutApproval?(cred: Credential, value: number): Promise<Outcome>;
+  /** Propose a reading; the person must approve it. */
+  propose?(cred: Credential, value: number): Promise<Proposal>;
+  /** The person approves (white-box: the passkey step itself is tested end to end, A2/A6). */
+  approveAsPerson?(approvalId: string): Promise<void>;
+  /** Commit a proposal, optionally changing the value from what was approved. */
+  commit?(cred: Credential, p: Proposal, value?: number): Promise<Outcome>;
+  /** The agent calls the approval endpoint with its own credential; returns the HTTP status. */
+  selfApprove?(cred: Credential, approvalId: string): Promise<number>;
 }
 
 export type ProbeStatus = "pass" | "fail" | "missing" | "n/a";

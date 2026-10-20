@@ -43,13 +43,15 @@ export type RefusalCode =
   | "locked_label"
   | "unknown_label"
   | "approval_missing"
+  | "approval_pending"
   | "approval_denied"
   | "approval_expired"
   | "approval_used"
   | "approval_mismatch"
   | "approval_wrong_person"
   | "approval_not_verified"
-  | "check_failed";
+  | "check_failed"
+  | "invalid_change";
 
 export type Rule = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
@@ -191,4 +193,61 @@ export function effectivePermissions(
 ): Permission[] {
   if (!role || !grant || grant.status !== "active") return [];
   return role.permissions.filter((p) => grant.permissions.includes(p));
+}
+
+/** What the gateway knows about an approval when the agent commits (rule 7). */
+export type CommitContext = {
+  approval: {
+    agentId: string;
+    personId: string;
+    status: "pending" | "approved" | "used" | "denied" | "expired";
+    payloadHash: string;
+    approvedAt: Date | null;
+    expiresAt: Date;
+  } | null;
+  agentId: string;
+  personId: string;
+  approverName: string;
+  /** Hash of the change the agent is committing now. */
+  payloadHash: string;
+  now: Date;
+};
+
+/** How long after approval a change may be committed. */
+export const APPROVAL_WINDOW_SECONDS = 120;
+
+/**
+ * Rule 7: a write needs a matching, unused, fresh approval for this agent and
+ * this person. The rule behind it: an approval is real only if nothing the
+ * agent holds can produce it.
+ */
+export function decideCommit(c: CommitContext): Verdict {
+  const a = c.approval;
+  const who = firstName(c.approverName);
+  // Someone else's approval looks exactly like no approval.
+  if (!a || a.agentId !== c.agentId || a.personId !== c.personId) {
+    return refuse(7, "approval_missing", "no such approval");
+  }
+  if (a.status === "denied") return refuse(7, "approval_denied", `${who} said no`);
+  if (a.status === "used") return refuse(7, "approval_used", "this approval was already used");
+  if (a.status === "pending") {
+    return a.expiresAt <= c.now
+      ? refuse(7, "approval_expired", "the proposal expired before it was approved")
+      : refuse(7, "approval_pending", `waiting for ${who}'s OK`);
+  }
+  if (
+    a.status === "expired" ||
+    !a.approvedAt ||
+    c.now.getTime() - a.approvedAt.getTime() > APPROVAL_WINDOW_SECONDS * 1000
+  ) {
+    return refuse(
+      7,
+      "approval_expired",
+      "the approval expired (commit within 2 minutes of approving)",
+    );
+  }
+  if (a.payloadHash !== c.payloadHash) {
+    return refuse(7, "approval_mismatch", `the change doesn't match what ${who} approved`);
+  }
+  return ALLOW;
 }

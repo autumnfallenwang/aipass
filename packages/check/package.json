@@ -23,6 +23,7 @@
     "@aipass/fhir": "workspace:*",
     "@aipass/gateway": "workspace:*",
     "@hono/node-server": "^2.1.5",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "@aipass/api": "workspace:*"
   }
 }

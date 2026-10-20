@@ -28,6 +28,7 @@ import { and, count, desc, eq, inArray, lt, max, type SQL, sql } from "drizzle-o
 import { Hono } from "hono";
 import { SignJWT } from "jose";
 import * as z from "zod";
+import { adminApprovalRoutes } from "./approvals.ts";
 import type { Auth } from "./auth.ts";
 import { config, passIssuer } from "./config.ts";
 import { activeKey, PASS_ALG } from "./keys.ts";
@@ -479,6 +480,8 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
     const [p] = await db.select({ n: count() }).from(persons);
     return c.json({ agents: a, last24h: r, persons: p?.n ?? 0, groups: GROUPS });
   });
+
+  app.route("/", adminApprovalRoutes({ db }));
 
   // ---------- health check (S4) ----------
 

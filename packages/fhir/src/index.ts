@@ -9,6 +9,17 @@ export { FhirClient, type FhirClientOptions, FhirError } from "./client.ts";
 export { normaliseRef, patientRefsOf } from "./compartment.ts";
 export { GROUP_QUERIES, type GroupQuery, groupOf } from "./groups.ts";
 export { maskPatient } from "./mask.ts";
+export {
+  approvalChallenge,
+  buildProposedObservation,
+  describeChange,
+  MEASURE_NAMES,
+  MEASURES,
+  type Measure,
+  ProposalError,
+  type ProposedChange,
+  payloadHash,
+} from "./proposal.ts";
 export { receiptSentence, type SentenceInput } from "./sentence.ts";
 export { type SimpleRecord, simplify } from "./simplify.ts";
 export type {

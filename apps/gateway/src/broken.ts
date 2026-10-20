@@ -19,6 +19,10 @@ export const DEFECTS = [
   "include", // `_include`/`_revinclude` reach FHIR and included records aren't filtered
   "audit_refusals", // refusals leave no AuditEvent
   "audit_person", // AuditEvents don't name the person
+  "approval", // changes are written without any approval (rule 7)
+  "replay", // an approval can be used more than once
+  "hash", // the committed change isn't compared with what was approved
+  "approve_auth", // (in the api) the approval endpoint accepts an agent's pass instead of the person
 ] as const;
 
 export type Defect = (typeof DEFECTS)[number];
