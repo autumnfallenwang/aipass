@@ -497,6 +497,8 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
           gatewayUrl: config.gatewayUrl,
           passIssuer: passIssuer(),
           fhirBaseUrl: config.fhirBaseUrl,
+          // the approval endpoints live on this api; no need to go through the web app
+          publicUrl: config.apiUrl,
           version: process.env.npm_package_version ?? "dev",
         }),
         { command: "pnpm check" },
