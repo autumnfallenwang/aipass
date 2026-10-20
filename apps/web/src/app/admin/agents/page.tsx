@@ -171,13 +171,13 @@ export default function AgentsPage() {
                 <button
                   type="button"
                   title={a.mcpUrl}
-                  className="flex max-w-56 items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
+                  className="flex max-w-80 items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     void navigator.clipboard?.writeText(a.mcpUrl);
                     toast.success("Copied");
                   }}
                 >
-                  <span className="truncate">{new URL(a.mcpUrl).pathname}</span>
+                  <span className="truncate">{a.mcpUrl}</span>
                   <Copy className="size-3 shrink-0" />
                 </button>
               </TableCell>

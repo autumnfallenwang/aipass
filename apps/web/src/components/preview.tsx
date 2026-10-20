@@ -89,7 +89,9 @@ export function PreviewPanel({ target }: { target: PreviewTarget }) {
   const key = JSON.stringify(target);
 
   useEffect(() => {
-    if (!personId && persons.data?.[0]) setPersonId(persons.data[0].id);
+    // Start with the person the most agents act for (in the demo, Maria).
+    const first = [...(persons.data ?? [])].sort((a, b) => b.grants.length - a.grants.length)[0];
+    if (!personId && first) setPersonId(first.id);
   }, [persons.data, personId]);
 
   useEffect(() => {

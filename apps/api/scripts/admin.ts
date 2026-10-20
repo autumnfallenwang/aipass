@@ -40,7 +40,8 @@ async function run(): Promise<string> {
       .map((r) => `${r.ts.toISOString()}  ${r.decision.padEnd(6)}  ${r.sentence}`)
       .join("\n");
   }
-  process.exitCode = 2;
+  // No arguments asks for help; anything else unrecognised is an error.
+  if (what !== undefined) process.exitCode = 2;
   return "usage: pnpm admin agent stop|resume <agent> | grant revoke|restore <person> <agent> | receipts [n]";
 }
 

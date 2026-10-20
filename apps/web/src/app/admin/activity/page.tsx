@@ -27,6 +27,18 @@ import { type Agent, api, type Person, type Receipt, useApi } from "@/lib/api";
 
 const ALL = "__all";
 
+/** What each rule number on a refusal means (docs/PLAN.md § 3). */
+const RULES: Record<number, string> = {
+  0: "the check itself failed, so nothing was released",
+  1: "the pass must be valid",
+  2: "the agent must be active and the app approved",
+  3: "the role must allow it",
+  4: "the person must have agreed",
+  5: "it must be the person's own record",
+  6: "no locked label on the record",
+  7: "the person must approve this exact change",
+};
+
 export default function ActivityPage() {
   const agents = useApi<Agent[]>("/admin/agents");
   const persons = useApi<Person[]>("/admin/persons");
@@ -34,6 +46,7 @@ export default function ActivityPage() {
   const [person, setPerson] = useState(ALL);
   const [decision, setDecision] = useState(ALL);
   const [previews, setPreviews] = useState(false);
+  const [chain, setChain] = useState<string | null>(null);
 
   const q = new URLSearchParams({ limit: "100", mode: previews ? "all" : "live" });
   if (agent !== ALL) q.set("agent", agent);
@@ -43,8 +56,14 @@ export default function ActivityPage() {
 
   async function verify() {
     const r = await api<{ intact: boolean; brokenAt: string | null }>("/admin/receipts/verify");
-    if (r.intact) toast.success("Receipt chain intact: no receipt has been edited or removed.");
-    else toast.error(`Receipt chain broken at ${r.brokenAt}`);
+    const at = new Date().toLocaleTimeString();
+    if (r.intact) {
+      toast.success("Receipt chain intact: no receipt has been edited or removed.");
+      setChain(`Chain intact (checked ${at})`);
+    } else {
+      toast.error(`Receipt chain broken at ${r.brokenAt}`);
+      setChain(`Chain BROKEN at ${r.brokenAt} (checked ${at})`);
+    }
   }
 
   return (
@@ -53,9 +72,19 @@ export default function ActivityPage() {
         title="Activity"
         description="One receipt per request, refusals included. Each links to the AuditEvent in the FHIR record's own log."
         actions={
-          <Button variant="outline" onClick={verify}>
-            <CheckCircle2 /> Verify chain
-          </Button>
+          <>
+            {chain && (
+              <span
+                className="self-center text-sm text-muted-foreground"
+                data-testid="chain-status"
+              >
+                {chain}
+              </span>
+            )}
+            <Button variant="outline" onClick={verify}>
+              <CheckCircle2 /> Verify chain
+            </Button>
+          </>
         }
       />
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -128,7 +157,12 @@ export default function ActivityPage() {
               <TableCell className="whitespace-normal">
                 {r.sentence}
                 {r.rule !== null && (
-                  <span className="ml-2 text-xs text-muted-foreground">rule {r.rule}</span>
+                  <span
+                    className="ml-2 cursor-help text-xs text-muted-foreground underline decoration-dotted"
+                    title={`Rule ${r.rule}: ${RULES[r.rule] ?? ""}`}
+                  >
+                    rule {r.rule}
+                  </span>
                 )}
               </TableCell>
               <TableCell>

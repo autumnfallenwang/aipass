@@ -27,7 +27,7 @@ pnpm dev
 ```
 
 `pnpm dev` does the following:
-1. Starts Postgres and a HAPI FHIR server. HAPI takes about a minute on first start.
+1. Starts Postgres and a HAPI FHIR server. On a first run Docker pulls the HAPI image (about 600 MB); after that HAPI starts in under a minute.
 2. Loads the synthetic patients.
 3. Creates the demo: two AI agents (a Diabetes Coach and a Scheduling Assistant), their roles, and Maria's agreement to both.
 4. Runs the apps.
@@ -38,12 +38,12 @@ Then:
 2. **Agents** lists both AIs. Each has its own gateway URL.
 3. **Roles → Scheduling Assistant** shows the role. Pick **Maria Santos** as the test person, and the panel on the right shows **her chart as that AI sees it**:
    - her name, her phone number and two appointments;
-   - her therapy appointment withheld (*mental-health records are always private*);
+   - "1 withheld: *mental-health records are always private*" (that is her therapy appointment);
    - everything else hidden (*not in the Scheduling Assistant role*).
-4. Connect a real AI. [`docs/demo-s1.md`](docs/demo-s1.md) shows Claude Code reading Maria's A1c, being refused her therapy notes, and being cut off when you click **Stop**.
+4. Connect a real AI. [`docs/demo-s1.md`](docs/demo-s1.md) shows Claude Code reading Maria's A1c, being refused her therapy notes, and being cut off when you stop it (**Stop** on the Agents page).
 5. **Activity** shows a receipt for every request. **Verify chain** checks that none has been edited or removed.
 
-`pnpm smoke` checks that every service is healthy.
+While `pnpm dev` runs, `pnpm smoke` in a second terminal checks that every service is healthy.
 
 | Service | URL |
 |---|---|

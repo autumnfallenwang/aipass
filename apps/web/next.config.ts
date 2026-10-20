@@ -5,6 +5,7 @@ const apiUrl = (process.env.API_URL ?? "http://localhost:3001").replace(/\/$/, "
 const config: NextConfig = {
   transpilePackages: ["@aipass/shared"],
   poweredByHeader: false,
+  devIndicators: false,
   // The end-to-end tests run a second dev server next to yours.
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
   // One public origin: the browser only ever talks to this app, and /api/*
