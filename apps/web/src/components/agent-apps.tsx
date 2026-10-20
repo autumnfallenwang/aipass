@@ -32,6 +32,16 @@ export function AgentAppsDialog({ agent, onClose }: { agent: Agent; onClose: () 
   const allowed = useApi<AllowedApp[]>(`/admin/agents/${agent.id}/clients`);
   const known = useApi<KnownApp[]>("/admin/oauth-clients");
   const [clientId, setClientId] = useState("");
+  const [secret, setSecret] = useState<{ clientId: string; clientSecret: string } | null>(null);
+
+  async function headless() {
+    try {
+      setSecret(await api(`/admin/agents/${agent.id}/headless-client`, { method: "POST" }));
+      await allowed.reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   async function allow(id: string) {
     try {
@@ -117,6 +127,21 @@ export function AgentAppsDialog({ agent, onClose }: { agent: Agent; onClose: () 
                 ))}
               </SelectContent>
             </Select>
+          )}
+          <Button variant="outline" className="justify-self-start" onClick={headless}>
+            <Plus /> Create a headless client (token exchange)
+          </Button>
+          {secret && (
+            <div
+              className="rounded-md border border-amber-300 p-3 text-xs"
+              data-testid="headless-secret"
+            >
+              <p className="mb-1 font-medium">
+                Shown once. The agent authenticates with these at the token endpoint:
+              </p>
+              <p className="font-mono">client_id: {secret.clientId}</p>
+              <p className="font-mono">client_secret: {secret.clientSecret}</p>
+            </div>
           )}
           <form
             className="flex gap-2"

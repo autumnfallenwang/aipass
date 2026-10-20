@@ -10,6 +10,7 @@ import { adminRoutes } from "./admin.ts";
 import { approvalRoutes } from "./approvals.ts";
 import { type Auth, adminExists } from "./auth.ts";
 import { config } from "./config.ts";
+import { publicConnectionRoutes } from "./connections.ts";
 import { publicJwks } from "./keys.ts";
 import { mintPass, PassError } from "./pass.ts";
 import { personRoutes } from "./person.ts";
@@ -59,6 +60,7 @@ export function createApp(deps: ApiDeps) {
   });
 
   app.route("/api/admin", adminRoutes({ db, auth, fhir: deps.fhir, fetch: deps.fetch }));
+  app.route("/api/connections", publicConnectionRoutes({ db }));
   // approvals before the general person routes: both live under /api/person
   app.route("/api/person/approvals", approvalRoutes({ db, auth }));
   app.route("/api/person", personRoutes({ db, auth }));

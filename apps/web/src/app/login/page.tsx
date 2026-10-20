@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound } from "lucide-react";
+import { Building2, KeyRound } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type SubmitEvent, Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -17,8 +17,12 @@ function LoginForm() {
   const [needsAdmin, setNeedsAdmin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [providers, setProviders] = useState<{ name: string; providerId: string }[]>([]);
 
   useEffect(() => {
+    api<{ name: string; providerId: string }[]>("/connections")
+      .then(setProviders)
+      .catch(() => setProviders([]));
     // In the middle of an AI app's login, only ever sign in.
     if (inOAuthFlow()) {
       setNeedsAdmin(false);
@@ -65,6 +69,14 @@ function LoginForm() {
       return;
     }
     await land(res?.data);
+  }
+
+  async function viaConnection(providerId: string) {
+    const res = await authClient.signIn.sso({
+      providerId,
+      callbackURL: `/after-login${next ? `?next=${encodeURIComponent(next)}` : ""}`,
+    });
+    if (res?.error) toast.error(res.error.message ?? "Sign-in failed");
   }
 
   if (needsAdmin === null) return null;
@@ -127,6 +139,18 @@ function LoginForm() {
               <KeyRound /> Sign in with a passkey
             </Button>
           )}
+          {!needsAdmin &&
+            !inOAuthFlow() &&
+            providers.map((p) => (
+              <Button
+                key={p.providerId}
+                type="button"
+                variant="outline"
+                onClick={() => viaConnection(p.providerId)}
+              >
+                <Building2 /> Sign in with {p.name}
+              </Button>
+            ))}
         </form>
       </CardContent>
     </Card>

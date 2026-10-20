@@ -1,0 +1,81 @@
+{
+  "realm": "sunrise",
+  "displayName": "Sunrise Clinic (stand-in hospital login, synthetic users)",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 300,
+  "users": [
+    {
+      "username": "maria",
+      "email": "maria@example.org",
+      "emailVerified": true,
+      "firstName": "Maria",
+      "lastName": "Santos",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "maria-kc-password", "temporary": false }]
+    },
+    {
+      "username": "john",
+      "email": "john@example.org",
+      "emailVerified": true,
+      "firstName": "John",
+      "lastName": "Carter",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "john-kc-password", "temporary": false }]
+    },
+    {
+      "username": "mallory",
+      "email": "mallory@example.org",
+      "emailVerified": false,
+      "firstName": "Mallory",
+      "lastName": "Unverified",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "mallory-kc-password", "temporary": false }]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "aipass-login",
+      "name": "aipass (sign-in)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "aipass-login-dev-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:3000/*", "http://localhost:4000/*"],
+      "webOrigins": ["http://localhost:3000", "http://localhost:4000"]
+    },
+    {
+      "clientId": "coach-cli",
+      "name": "A headless diabetes-coach app (gets the person's token, then exchanges it at aipass)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "audience: aipass",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "aipass",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "other-app",
+      "name": "An unrelated app whose tokens are not meant for aipass",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ]
+}

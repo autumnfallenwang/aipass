@@ -7,7 +7,7 @@ import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
 import { asAgent } from "./agent.ts";
 import { E2E, E2E_ENV } from "./env.ts";
-import { MARIA, signIn } from "./helpers.ts";
+import { ensureLogin, MARIA, signIn } from "./helpers.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -85,24 +85,8 @@ test("setup: Maria and John have logins and passkeys; Maria lets the coach propo
   browser,
 }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "People" }).click();
-  for (const [id, who] of [
-    ["maria", MARIA],
-    ["john", JOHN],
-  ] as const) {
-    const card = page.locator(`[data-person="${id}"]`);
-    // wait until the card has loaded one way or the other
-    await expect(
-      card.getByText("Has a login").or(card.getByRole("button", { name: "Give a login" })),
-    ).toBeVisible();
-    if (await card.getByRole("button", { name: "Give a login" }).isVisible()) {
-      await card.getByRole("button", { name: "Give a login" }).click();
-      await page.getByLabel("Email").fill(who.email);
-      await page.getByLabel("Temporary password").fill(who.password);
-      await page.getByRole("button", { name: "Create login" }).click();
-      await expect(card.getByText("Has a login")).toBeVisible();
-    }
-  }
+  await ensureLogin(page, "maria", MARIA);
+  await ensureLogin(page, "john", JOHN);
   const put = await page.request.put(`${E2E.web}/api/admin/persons/maria/grants/diabetes-coach`, {
     data: { permissions: ["labs:read", "labs:propose"] },
     headers: { origin: E2E.web },

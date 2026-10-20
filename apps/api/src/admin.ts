@@ -31,6 +31,7 @@ import * as z from "zod";
 import { adminApprovalRoutes } from "./approvals.ts";
 import type { Auth } from "./auth.ts";
 import { config, passIssuer } from "./config.ts";
+import { adminConnectionRoutes } from "./connections.ts";
 import { activeKey, PASS_ALG } from "./keys.ts";
 import { allowClient, disallowClient, syncAgentResource } from "./oauth.ts";
 
@@ -482,6 +483,7 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
   });
 
   app.route("/", adminApprovalRoutes({ db }));
+  app.route("/", adminConnectionRoutes({ db, auth, fetch: deps.fetch }));
 
   // ---------- health check (S4) ----------
 

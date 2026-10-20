@@ -6,7 +6,7 @@
  */
 import { expect, type Page, test } from "@playwright/test";
 import { E2E } from "./env.ts";
-import { MARIA, signIn } from "./helpers.ts";
+import { ensureLogin, MARIA, signIn } from "./helpers.ts";
 import { CALLBACK, claimsOf, oauthAgent } from "./oauth-agent.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -19,15 +19,9 @@ async function signInAsMaria(page: Page) {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
-test("the admin gives Maria a login", async ({ page }) => {
+test("Maria has an aipass login", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "People" }).click();
-  const maria = page.locator('[data-person="maria"]');
-  await maria.getByRole("button", { name: "Give a login" }).click();
-  await page.getByLabel("Email").fill(MARIA.email);
-  await page.getByLabel("Temporary password").fill(MARIA.password);
-  await page.getByRole("button", { name: "Create login" }).click();
-  await expect(maria.getByText("Has a login")).toBeVisible();
+  await ensureLogin(page, "maria", MARIA);
 });
 
 test("an app the admin hasn't approved can't get a pass for the agent", async () => {

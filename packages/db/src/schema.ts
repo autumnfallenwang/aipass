@@ -2,6 +2,7 @@ import type { AgentStatus, GrantStatus, PatientField, Permission, RoleRule } fro
 import { sql } from "drizzle-orm";
 import {
   bigserial,
+  boolean,
   index,
   integer,
   jsonb,
@@ -202,3 +203,21 @@ export const approvalRules = pgTable(
   },
   (t) => [primaryKey({ columns: [t.roleId, t.group] })],
 );
+
+/**
+ * Trusted identity providers (S6): a hospital's own login, Google, any OIDC
+ * issuer. Only tokens from an enabled connection are accepted for token
+ * exchange, and only connections with a login client offer sign-in.
+ */
+export const connections = pgTable("connections", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  issuer: text("issuer").notNull().unique(),
+  jwksUri: text("jwks_uri").notNull(),
+  /** The `aud` a subject token must carry to be exchanged here (e.g. "aipass"). */
+  audience: text("audience").notNull(),
+  /** Better Auth SSO provider id, when people and admins can sign in with it. */
+  ssoProviderId: text("sso_provider_id"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: createdAt(),
+});

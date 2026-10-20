@@ -1,15 +1,17 @@
-import { authSchema, type Db, persons, users } from "@aipass/db";
+import { authSchema, connections, type Db, persons, users } from "@aipass/db";
 import { cimd } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
+import { sso } from "@better-auth/sso";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { jwt } from "better-auth/plugins";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, isNotNull } from "drizzle-orm";
 import { config } from "./config.ts";
 import { agentIdOfResource, linkPendingClient } from "./oauth.ts";
 import { patientIdOf } from "./pass.ts";
+import { TOKEN_EXCHANGE, tokenExchange } from "./token-exchange.ts";
 
 export async function adminExists(db: Db): Promise<boolean> {
   const [row] = await db.select({ n: count() }).from(users).where(eq(users.role, "admin"));
@@ -23,6 +25,27 @@ export async function adminExists(db: Db): Promise<boolean> {
  *   the pass: `sub` = the person's login, `act.sub` = the agent, `aud` = that
  *   agent's gateway URL, 5 minutes.
  */
+/**
+ * Hosts Better Auth's SSO plugin refuses to fetch unless trusted: loopback,
+ * private ranges and single-label (container) names. A hospital's internal
+ * login lives on one of these; a public one (Google) needs no trust.
+ */
+export function isInternalHost(hostname: string): boolean {
+  const h = hostname.replace(/^\[|\]$/g, "");
+  return (
+    h === "localhost" ||
+    h.endsWith(".localhost") ||
+    h.endsWith(".local") ||
+    h.endsWith(".internal") ||
+    !h.includes(".") ||
+    /^127\./.test(h) ||
+    /^10\./.test(h) ||
+    /^192\.168\./.test(h) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
+    /^(::1|f[cd][0-9a-f]{2}:)/i.test(h)
+  );
+}
+
 export function createAuth(db: Db) {
   const origin = new URL(config.publicUrl);
   return betterAuth({
@@ -30,8 +53,18 @@ export function createAuth(db: Db) {
     baseURL: config.publicUrl,
     basePath: "/api/auth",
     secret: config.authSecret,
-    trustedOrigins: [config.publicUrl],
-    database: drizzleAdapter(db, { provider: "pg", schema: authSchema }),
+    // The public origin, plus enabled sign-in connections on internal hosts
+    // (S6). Re-read on every request, so disabling a connection takes effect.
+    trustedOrigins: async () => {
+      const rows = await db
+        .select({ issuer: connections.issuer })
+        .from(connections)
+        .where(and(eq(connections.enabled, true), isNotNull(connections.ssoProviderId)));
+      const internal = rows.map((r) => new URL(r.issuer)).filter((u) => isInternalHost(u.hostname));
+      return [config.publicUrl, ...internal.map((u) => u.origin)];
+    },
+    // Transactions on: the SSO plugin links accounts inside one (S6).
+    database: drizzleAdapter(db, { provider: "pg", schema: authSchema, transaction: true }),
     emailAndPassword: { enabled: true, minPasswordLength: 10 },
     user: {
       additionalFields: {
@@ -62,7 +95,9 @@ export function createAuth(db: Db) {
         allowUnauthenticatedClientRegistration: true,
         clientRegistrationDefaultApplicationType: "infer",
         enforcePerClientResources: true,
+        grantTypes: ["authorization_code", "refresh_token", "client_credentials", TOKEN_EXCHANGE],
         extensions: [
+          tokenExchange(db),
           {
             claims: {
               accessToken: async ({ user, resources }) => {
@@ -77,6 +112,36 @@ export function createAuth(db: Db) {
             },
           },
         ],
+      }),
+      sso({
+        // A connection is an identity provider the admin chose to trust, so
+        // its email_verified claim counts (and is required, below).
+        trustEmailVerified: true,
+        // Someone signing in with a connected login (S6) is linked to their
+        // existing aipass account, and only when the provider says the email
+        // is verified.
+        resolveUser: async (input, { database }) => {
+          const { email, emailVerified } = input.providerUser;
+          if (!emailVerified) {
+            return {
+              action: "reject",
+              code: "email_not_verified",
+              message: "your login provider hasn't verified your email",
+            };
+          }
+          const existing = await database.findOne<{ id: string }>({
+            model: "user",
+            where: [{ field: "email", value: email.toLowerCase() }],
+          });
+          // No sign-up through a connection: logins come from the admin.
+          return existing
+            ? { action: "link", userId: existing.id, profile: "preserve" }
+            : {
+                action: "reject",
+                code: "no_account",
+                message: "ask your clinic's aipass admin to give you a login",
+              };
+        },
       }),
       cimd({
         fetchClientMetadataResource,

@@ -34,5 +34,48 @@ services:
     ports:
       - "127.0.0.1:${AIPASS_HAPI_PORT:-8080}:8080"
 
+  # S6: a hospital's own login. `docker compose --profile keycloak up -d`
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    profiles: [keycloak]
+    command: ["start-dev", "--import-realm", "--http-port=8180"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-dev-only
+      KC_HOSTNAME: http://localhost:8180
+    volumes:
+      - ./keycloak/sunrise-realm.json:/opt/keycloak/data/import/sunrise-realm.json:ro
+    ports:
+      - "127.0.0.1:${AIPASS_KEYCLOAK_PORT:-8180}:8180"
+    healthcheck:
+      # No curl in the image; bash can still ask for the realm's discovery document.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8180 &&
+          printf 'GET /realms/sunrise/.well-known/openid-configuration HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"issuer"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+
+  # S6: an EHR's SMART server, simulated. The SMART launcher puts SMART auth in
+  # front of the same HAPI. `docker compose --profile smart up -d`
+  smart:
+    # Only a "latest" tag is published (2025-02-13); pinned by digest.
+    image: smartonfhir/smart-launcher-2@sha256:72bd3e3c682ce4c74e6dddb605d89acad7c8aae446ae38079e8dfe8455b84793
+    profiles: [smart]
+    environment:
+      NODE_ENV: production
+      PORT: 80
+      FHIR_SERVER_R4: http://hapi:8080/fhir
+      FHIR_SERVER_R3: ""
+      FHIR_SERVER_R2: ""
+      SECRET: aipass-dev-only-launcher-secret
+      ACCESS_TOKEN_LIFETIME: 5
+    ports:
+      - "127.0.0.1:${AIPASS_SMART_PORT:-8090}:80"
+
 volumes:
   pgdata:

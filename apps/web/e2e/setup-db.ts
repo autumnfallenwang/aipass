@@ -23,7 +23,7 @@ const { db, client, close } = createDb(url);
 await client.unsafe(
   `truncate table receipts, grants, agent_clients, agents, roles, persons, passkey, verification, account, session,
    oauth_client_resource, oauth_refresh_token, oauth_access_token, oauth_consent, oauth_client_assertion,
-   oauth_client, oauth_resource, jwks, "user" restart identity cascade`,
+   oauth_client, oauth_resource, jwks, connections, sso_provider, "user" restart identity cascade`,
 );
 await seedDemo(db);
 // The api syncs this on startup too, but Playwright starts it before this reset.

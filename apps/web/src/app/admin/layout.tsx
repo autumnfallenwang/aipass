@@ -6,6 +6,7 @@ import {
   Fingerprint,
   HeartPulse,
   KeyRound,
+  Link2,
   LogOut,
   ShieldCheck,
   Users,
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/admin/roles", label: "Roles", icon: ShieldCheck },
   { href: "/admin/people", label: "People", icon: Users },
   { href: "/admin/approvals", label: "Approvals", icon: Fingerprint },
+  { href: "/admin/connections", label: "Connections", icon: Link2 },
   { href: "/admin/activity", label: "Activity", icon: Activity },
   { href: "/admin/health", label: "Health check", icon: HeartPulse },
 ];
