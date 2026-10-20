@@ -1,14 +1,14 @@
 # Scorecard: aipass gateway
 
-**Scope:** this repository's gateway at the S4 commit, run with `pnpm dev` (Postgres, HAPI FHIR, the synthetic fixtures). The check uses the white-box adapter: it signs passes with the api's own key, registers two temporary probe agents, and stops and revokes them in the database.
+**Scope:** this repository's gateway at the v1.0 code (`v0.4.0-5-g46c4315`), run with `pnpm dev` (Postgres, HAPI FHIR, the synthetic fixtures). The check uses the white-box adapter: it signs passes with the api's own key, registers two temporary probe agents, and stops and revokes them in the database. The same A comes from the container stack (`docker compose up`, run by CI on every push) and from every cell of the S6 matrix.
 
 **Grade: A**: 16 passed, 0 failed, 0 missing.
 
 | | |
 |---|---|
 | Target | aipass gateway |
-| Version | v0.2.0-2-g39808b8-dirty |
-| Date | 2026-10-20T03:21:42.795Z |
+| Version | v0.4.0-5-g46c4315 |
+| Date | 2026-10-20T04:52:40.284Z |
 | Rerun | `pnpm check` |
 
 | Probe | What it tries | Result | Detail |
@@ -36,5 +36,3 @@
 - *Missing* counts against the grade like a failure, but is reported separately: it means "this system doesn't try", not "this system tried and failed".
 
 The probes run on synthetic data only (aipass `fixtures/`).
-
-**Self-test.** `packages/check/test/planted.int.test.ts` starts the gateway 13 times: once correct, and once with each defect from `apps/gateway/src/broken.ts`. Each of the 16 planted defects is caught by its own probe; the correct gateway passes all 16. See [the check README](../README.md#proving-the-inspector).

@@ -21,9 +21,23 @@ Let AI help with your health records, on your terms: it sees only what you allow
 
 It works with any login system (identity provider) and any FHIR server, and you host it yourself. The project itself is developed and tested on localhost only: it runs no hosted instance, and where you deploy it is up to you.
 
-## Try it (about 5 minutes)
+## Try it with Docker (about 2 minutes)
 
-You need Node 22+ (24 LTS recommended), pnpm 10 and Docker. All data is synthetic.
+You need only Docker. All data is synthetic.
+
+```sh
+git clone https://github.com/autumnfallenwang/aipass.git
+cd aipass
+docker compose up
+```
+
+This builds and starts everything: Postgres, a HAPI FHIR server with the synthetic patients, the api, the gateway and the web app. From an empty Docker on our test machine, it took under 2 minutes to have every service healthy. Then open **http://localhost:3000**; the first account you create becomes the admin. AI clients connect to `http://localhost:3002/agents/{agent-id}/mcp`.
+
+The secrets in `compose.yaml` are public values for a local trial. aipass refuses them unless it runs on localhost. Signed images (`ghcr.io/autumnfallenwang/aipass-{api,gateway,web}`) and a Helm chart (`deploy/helm/aipass`) are there for your own deployment. The project itself deploys nothing (see [decisions](docs/decisions.md), D12).
+
+## Develop (about 5 minutes)
+
+You need Node 22+ (24 LTS recommended), pnpm 10 and Docker.
 
 ```sh
 git clone https://github.com/autumnfallenwang/aipass.git
@@ -83,6 +97,8 @@ To try another login system and an EHR, also start the local stand-ins: `pnpm se
 | `packages/db` | Database schema, hash-chained receipts, demo seed |
 | `packages/check` | The health check: probes, target adapters, grades |
 | `fixtures/` | Synthetic patients (Maria, John, two Synthea patients) |
+| `deploy/` | Dev services (`compose.yaml`: Postgres, HAPI, Keycloak, the SMART launcher), the Keycloak realm, the Helm chart |
+| `Dockerfile`, `compose.yaml` | The three images, and the whole stack in one command |
 
 ## Tests
 
@@ -93,8 +109,26 @@ pnpm test:e2e           # the admin UI in a real browser, plus an MCP client pla
 pnpm check              # the health check against your running gateway
 ```
 
+CI also builds the containers and runs `docker compose up`, which must score A on the health check. It also lints the Helm chart and audits every shipped dependency.
+
+## Security
+
+- [Threat model](docs/security/threat-model.md): what aipass protects, from whom, how, and what's still open.
+- [OWASP ASVS 5.0 Level 2 self-check](docs/security/asvs-l2.md): every requirement, with evidence.
+- Releases are signed. Each image and source tarball has a GitHub attestation (SLSA provenance, Sigstore). Check one with `gh attestation verify oci://ghcr.io/autumnfallenwang/aipass-api:<version> --owner autumnfallenwang`.
+- The whole story: [Who did this, for whom? Identity for AI agents on FHIR](docs/writeup.md).
+
 ## Status
 
-**v0.4** (any OpenID Connect login, token exchange for headless agents, and EHRs over SMART on FHIR through a vault). Before that: OAuth login for AI apps, the person's consent and "My AIs", and passkey-approved changes. The plan, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
+**v1.0.** Everything in the [plan](docs/PLAN.md) is built:
+- the guard;
+- the admin UI;
+- OAuth with the person's consent;
+- the health check;
+- passkey-approved changes;
+- any login and any FHIR server;
+- containers, signed releases and the security docs.
+
+A few checks wait on registrations or devices only the project owner has (Google, Epic's sandbox, a real phone); the plan lists them. The plan, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
 
 No licence has been chosen yet, so all rights are reserved for now (see [decisions](docs/decisions.md)).

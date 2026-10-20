@@ -47,6 +47,15 @@ if (!checked.ok) {
   );
 }
 const report = await checked.json();
+
+// "Preview as this role" goes from the api to the gateway, too.
+const preview = await call("/api/admin/preview", {
+  method: "POST",
+  headers: { cookie: cookie(res) },
+  body: JSON.stringify({ roleId: "scheduling-assistant", personId: "maria" }),
+});
+if (!preview.ok) throw new Error(`preview: ${preview.status} ${await preview.text()}`);
+console.info("preview  ok");
 for (const r of report.results ?? [])
   console.info(`${r.status.padEnd(7)} ${r.id}${r.status === "pass" ? "" : `: ${r.detail}`}`);
 console.info(`grade ${report.grade}`);

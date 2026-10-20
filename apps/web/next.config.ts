@@ -19,6 +19,38 @@ const config: NextConfig = {
   // One public origin: the browser only ever talks to this app, and /api/*
   // (Better Auth, admin API) is passed through to the api. Cookies and
   // passkeys therefore belong to a single origin.
+  // Security headers (S7). The policy only goes into production builds:
+  // `next dev` needs eval for hot reload.
+  async headers() {
+    if (process.env.NODE_ENV !== "production") return [];
+    const csp = [
+      "default-src 'self'",
+      // Next inlines its bootstrap scripts and styles.
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "font-src 'self'",
+      "connect-src 'self'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+    ].join("; ");
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: csp },
+          { key: "Strict-Transport-Security", value: "max-age=31536000" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${apiUrl}/api/:path*` },

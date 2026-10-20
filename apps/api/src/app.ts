@@ -5,6 +5,7 @@ import {
   oauthProviderOpenIdConfigMetadata,
 } from "@better-auth/oauth-provider";
 import { type Context, Hono } from "hono";
+import { secureHeaders } from "hono/secure-headers";
 import * as z from "zod";
 import { adminRoutes } from "./admin.ts";
 import { approvalRoutes } from "./approvals.ts";
@@ -32,6 +33,16 @@ export type ApiDeps = {
 export function createApp(deps: ApiDeps) {
   const { db, auth } = deps;
   const app = new Hono();
+  // Security headers on every response (S7). HSTS only takes effect over
+  // HTTPS, which the adopter terminates in front of aipass.
+  app.use(
+    "*",
+    secureHeaders({
+      strictTransportSecurity: "max-age=31536000",
+      referrerPolicy: "no-referrer",
+      xFrameOptions: "DENY",
+    }),
+  );
 
   app.get("/health", (c) => c.json({ status: "ok", service: "aipass-api" }));
 

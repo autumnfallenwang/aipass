@@ -4,6 +4,7 @@ import { agentUrl, GROUPS, type PassClaims, rulesToPermissions } from "@aipass/s
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { secureHeaders } from "hono/secure-headers";
 import { Changes } from "./changes.ts";
 import type { GatewayConfig } from "./config.ts";
 import { type Caller, Guard, type RoleOverride } from "./guard.ts";
@@ -72,6 +73,16 @@ export function createGateway(deps: GatewayDeps) {
     `${config.gatewayUrl}/.well-known/oauth-protected-resource/agents/${agentId}/mcp`;
 
   const app = new Hono();
+  // Security headers on every response (S7). HSTS only takes effect over
+  // HTTPS, which the adopter terminates in front of aipass.
+  app.use(
+    "*",
+    secureHeaders({
+      strictTransportSecurity: "max-age=31536000",
+      referrerPolicy: "no-referrer",
+      xFrameOptions: "DENY",
+    }),
+  );
 
   app.get("/health", (c) => c.json({ status: "ok", service: "aipass-gateway" }));
 

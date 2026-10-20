@@ -565,7 +565,8 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
       .setExpirationTime("60s")
       .setJti(randomUUID())
       .sign(key);
-    const res = await doFetch(`${config.gatewayUrl}/internal/preview`, {
+    // The audience names the public gateway; the call may take the internal route.
+    const res = await doFetch(`${config.gatewayInternalUrl}/internal/preview`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}` },
     });
