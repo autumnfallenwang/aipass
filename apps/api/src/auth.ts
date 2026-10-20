@@ -56,12 +56,20 @@ export function createAuth(db: Db) {
     // The public origin, plus enabled sign-in connections on internal hosts
     // (S6). Re-read on every request, so disabling a connection takes effect.
     trustedOrigins: async () => {
-      const rows = await db
-        .select({ issuer: connections.issuer })
-        .from(connections)
-        .where(and(eq(connections.enabled, true), isNotNull(connections.ssoProviderId)));
-      const internal = rows.map((r) => new URL(r.issuer)).filter((u) => isInternalHost(u.hostname));
-      return [config.publicUrl, ...internal.map((u) => u.origin)];
+      try {
+        const rows = await db
+          .select({ issuer: connections.issuer })
+          .from(connections)
+          .where(and(eq(connections.enabled, true), isNotNull(connections.ssoProviderId)));
+        const internal = rows
+          .map((r) => new URL(r.issuer))
+          .filter((u) => isInternalHost(u.hostname));
+        return [config.publicUrl, ...internal.map((u) => u.origin)];
+      } catch (err) {
+        // No database yet (first start) or a bad row: trust only our own origin.
+        console.error(`trusted origins: ${(err as Error).message}`);
+        return [config.publicUrl];
+      }
     },
     // Transactions on: the SSO plugin links accounts inside one (S6).
     database: drizzleAdapter(db, { provider: "pg", schema: authSchema, transaction: true }),
