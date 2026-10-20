@@ -1,15 +1,16 @@
 import type { Db } from "@aipass/db";
 import type { FhirClient } from "@aipass/fhir";
+import { clientAddress } from "@aipass/shared";
 import {
   oauthProviderAuthServerMetadata,
   oauthProviderOpenIdConfigMetadata,
 } from "@better-auth/oauth-provider";
-import { type Context, Hono } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import * as z from "zod";
 import { adminRoutes } from "./admin.ts";
 import { approvalRoutes } from "./approvals.ts";
-import { type Auth, adminExists } from "./auth.ts";
+import { type Auth, adminExists, CLIENT_IP_HEADER } from "./auth.ts";
 import { config } from "./config.ts";
 import { publicConnectionRoutes } from "./connections.ts";
 import { personFhirRoutes } from "./fhir-servers.ts";
@@ -44,6 +45,39 @@ export function createApp(deps: ApiDeps) {
     }),
   );
 
+  // CSRF (S7, ASVS V3.5): browsers send Origin with every POST, PUT, PATCH
+  // and DELETE, so a state change from any other site is refused. Callers that
+  // aren't browsers (no Origin) are still checked by their session.
+  const ownOrigin = new URL(config.publicUrl).origin;
+  const sameOriginOnly: MiddlewareHandler = async (c, next) => {
+    if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
+      const o = c.req.header("origin");
+      const site = c.req.header("sec-fetch-site");
+      if ((o && o !== ownOrigin) || site === "cross-site" || site === "same-site") {
+        return c.json({ error: "cross-site request refused" }, 403);
+      }
+    }
+    await next();
+  };
+  app.use("/api/admin/*", sameOriginOnly);
+  app.use("/api/person/*", sameOriginOnly);
+
+  // Security events (S7, ASVS V16): every admin change, as one JSON line.
+  app.use("/api/admin/*", async (c, next) => {
+    await next();
+    if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
+      console.info(
+        JSON.stringify({
+          event: "admin_change",
+          admin: (c.get as (k: string) => unknown)("adminId") ?? null,
+          method: c.req.method,
+          path: c.req.path,
+          status: c.res.status,
+        }),
+      );
+    }
+  });
+
   app.get("/health", (c) => c.json({ status: "ok", service: "aipass-api" }));
 
   app.get("/.well-known/jwks.json", async (c) => {
@@ -52,7 +86,24 @@ export function createApp(deps: ApiDeps) {
   });
 
   // Better Auth: sign-up, sign-in, sessions, passkeys, and the OAuth server for AI apps.
-  app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+  app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+    // Managing SSO providers is the admin's job, through Connections; Better
+    // Auth would let any signed-in person register one. Sign-in callbacks pass.
+    const path = c.req.path;
+    if (path.startsWith("/api/auth/sso/") && !path.startsWith("/api/auth/sso/callback/")) {
+      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      const role = (session?.user as { role?: string } | undefined)?.role;
+      if (role !== "admin") return c.json({ error: "admins only" }, 403);
+    }
+    // Rate limits key on the client's address, which we work out ourselves
+    // (the socket, or a trusted proxy's X-Forwarded-For), never what the client says.
+    const headers = new Headers(c.req.raw.headers);
+    headers.set(
+      CLIENT_IP_HEADER,
+      clientAddress(deps.remoteAddr?.(c), c.req.header("x-forwarded-for"), config.trustedProxies),
+    );
+    return auth.handler(new Request(c.req.raw, { headers }));
+  });
 
   // RFC 8414 / OIDC discovery for the issuer `<public origin>/api/auth` (the web
   // app passes these paths through, D10).

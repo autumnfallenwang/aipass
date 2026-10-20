@@ -69,10 +69,8 @@ export function adminFhirServerRoutes(deps: { db: Db; fetch?: typeof fetch }) {
     try {
       endpoints = await discoverSmart(baseUrl, deps.fetch);
     } catch (err) {
-      return c.json(
-        { error: `couldn't read the server's SMART configuration: ${(err as Error).message}` },
-        400,
-      );
+      console.error(`SMART discovery for ${baseUrl} failed: ${(err as Error).message}`);
+      return c.json({ error: "couldn't read the server's SMART configuration" }, 400);
     }
     const id = slugify(name);
     const [row] = await db

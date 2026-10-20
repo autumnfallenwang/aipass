@@ -6,6 +6,7 @@ import { passkey } from "@better-auth/passkey";
 import { type SSOOptions, sso } from "@better-auth/sso";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { jwt } from "better-auth/plugins";
 import { and, count, eq, isNotNull } from "drizzle-orm";
 import { config } from "./config.ts";
@@ -89,6 +90,9 @@ export function ssoUserResolver(db: Db): SsoResolver {
         };
   };
 }
+
+/** Set by app.ts on every request to Better Auth: the client's address, as aipass determined it. */
+export const CLIENT_IP_HEADER = "x-aipass-client-ip";
 
 export function createAuth(db: Db) {
   const origin = new URL(config.publicUrl);
@@ -176,11 +180,35 @@ export function createAuth(db: Db) {
         onClientCreated: async ({ client }) => linkPendingClient(db, client.clientId),
       }),
     ],
+    // Security events (S7, ASVS V16): sign-ins, sign-ups, sign-outs and passkey
+    // sign-ins, success or failure, as one JSON line. No emails, no secrets.
+    hooks: {
+      after: createAuthMiddleware(async (ctx) => {
+        if (
+          !/^\/(sign-in|sign-up|sign-out|passkey\/verify-authentication|sso\/callback)/.test(
+            ctx.path,
+          )
+        )
+          return;
+        const returned = ctx.context.returned;
+        const failed =
+          returned instanceof APIError || (returned instanceof Response && !returned.ok);
+        console.info(
+          JSON.stringify({
+            event: "auth",
+            path: ctx.path,
+            outcome: failed ? "failed" : "ok",
+            user: ctx.context.newSession?.user.id ?? null,
+            ip: ctx.headers?.get(CLIENT_IP_HEADER) ?? null,
+          }),
+        );
+      }),
+    },
     advanced: {
       cookiePrefix: "aipass",
-      // Rate limits key on the client's address. Behind a proxy, only its
-      // X-Forwarded-For is believed, and only for the proxies listed (S7).
-      ipAddress: { trustedProxies: config.trustedProxies },
+      // Rate limits key on the client's address, which app.ts works out and
+      // puts in this header (it replaces whatever the client sent) (S7).
+      ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
     },
   });
 }

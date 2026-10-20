@@ -90,8 +90,10 @@ Each row names the control and the test that proves it. "Probe" means the health
 | Threat | Control | Proof |
 |---|---|---|
 | Account takeover by guessing passwords | Better Auth's rate limiter (on in production), keyed by the client's address: behind a proxy, only the proxies in `AIPASS_TRUSTED_PROXIES` may say what it is, and the Helm ingress sends `/api` straight to the api so that address arrives. Passwords of 10+ characters; passkeys | delegated; see [asvs-l2.md](asvs-l2.md) for what's still missing (MFA for admins, breached-password checks) |
-| A cross-site request uses someone's session | One origin (D10); SameSite cookies; Better Auth's origin check on auth routes; JSON APIs need a preflight that other origins don't pass | e2e on the real origin |
-| Someone else approves Maria's change | The approver must be the named person, signed in, with their own passkey | A6 |
+| A cross-site request uses someone's session | One origin (D10); SameSite cookies; Better Auth's origin check on its routes; aipass's own admin and person APIs refuse any state change whose `Origin` or `Sec-Fetch-Site` says another site | `security.int.test.ts` |
+| Someone else approves Maria's change, or reads it | The approver must be the named person, signed in, with their own passkey. Anyone but the person and the approver gets 403 and learns only who may approve | A6; `security.int.test.ts` |
+| A crafted sign-in link sends someone off-site afterwards | `next` is followed only when it is a path on aipass's own origin | `next-path.test.ts` |
+| A person registers a login provider of their own | Managing SSO providers is admin-only; and a provider with no enabled connection signs nobody in | `security.int.test.ts`; `exchange.int.test.ts` |
 | A token from a login system nobody trusted | Only enabled connections. Their discovered keys, the audience, a verified email, an existing login; no sign-up; one hop (`act`, `may_act`, `cnf` refused) (D13) | `exchange.int.test.ts` (15 tests); e2e sign-in refusals |
 | A disabled connection still signs people in | The resolver refuses on every callback, and an internal host's origin stops being trusted | `exchange.int.test.ts`; e2e "disabling the connection stops a sign-in already under way" |
 | A malicious OAuth app tricks the person | The consent page names the agent, the person and every group, and the person can untick any. Unknown apps need the admin's approval first | S3 e2e |

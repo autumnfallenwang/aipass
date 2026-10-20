@@ -43,6 +43,8 @@ export async function discoverSmart(
   const res = await doFetch(`${baseUrl.replace(/\/$/, "")}/.well-known/smart-configuration`, {
     headers: { accept: "application/json" },
     signal: AbortSignal.timeout(10_000),
+    // No redirects: the server answers for itself or not at all.
+    redirect: "error",
   });
   if (!res.ok) throw new SmartError(`SMART discovery answered ${res.status}`, res.status);
   const meta = (await res.json()) as { authorization_endpoint?: string; token_endpoint?: string };
@@ -105,6 +107,7 @@ async function tokenRequest(
     headers,
     body,
     signal: AbortSignal.timeout(15_000),
+    redirect: "error",
   });
   const json = (await res.json().catch(() => ({}))) as SmartTokens & { error?: string };
   // The error code only: a token endpoint's description can echo what we sent.

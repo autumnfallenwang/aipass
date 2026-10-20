@@ -33,7 +33,7 @@ const config: NextConfig = {
       "connect-src 'self'",
       "frame-ancestors 'none'",
       "form-action 'self'",
-      "base-uri 'self'",
+      "base-uri 'none'",
       "object-src 'none'",
     ].join("; ");
     return [

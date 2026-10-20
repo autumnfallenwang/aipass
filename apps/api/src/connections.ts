@@ -58,8 +58,10 @@ export function adminConnectionRoutes(deps: { db: Db; auth: Auth; fetch?: typeof
     // Discovery is the only way in: the issuer must say where its keys are.
     let jwksUri: string;
     try {
+      // No redirects: the issuer answers for itself or not at all.
       const res = await doFetch(`${issuer}/.well-known/openid-configuration`, {
         signal: AbortSignal.timeout(10_000),
+        redirect: "error",
       });
       const meta = (await res.json()) as { issuer?: string; jwks_uri?: string };
       if (!res.ok || meta.issuer?.replace(/\/$/, "") !== issuer || !meta.jwks_uri) {
@@ -67,7 +69,8 @@ export function adminConnectionRoutes(deps: { db: Db; auth: Auth; fetch?: typeof
       }
       jwksUri = meta.jwks_uri;
     } catch (err) {
-      return c.json({ error: `couldn't reach the issuer: ${(err as Error).message}` }, 400);
+      console.error(`connection discovery for ${issuer} failed: ${(err as Error).message}`);
+      return c.json({ error: "couldn't read the issuer's discovery document" }, 400);
     }
     const id = slugify(name);
     const ssoProviderId = clientId ? id : null;

@@ -1,5 +1,6 @@
 "use client";
 
+import { safeNextPath } from "@aipass/shared";
 import { Building2, KeyRound } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type SubmitEvent, Suspense, useEffect, useState } from "react";
@@ -13,7 +14,8 @@ import { authClient, followRedirect, inOAuthFlow } from "@/lib/auth-client";
 
 function LoginForm() {
   const router = useRouter();
-  const next = useSearchParams().get("next");
+  // Only a path on this site: a crafted link can't send someone elsewhere after sign-in.
+  const next = safeNextPath(useSearchParams().get("next"));
   const [needsAdmin, setNeedsAdmin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });

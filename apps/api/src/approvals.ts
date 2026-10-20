@@ -125,6 +125,13 @@ export function approvalRoutes(deps: { db: Db; auth: Auth }) {
     if (!found) return c.json({ error: "no such approval" }, 404);
     const { approval: a, approver, forPerson, agentName } = found;
     const isApprover = isPerson(approver, c.get("userId"));
+    // Someone who is neither the approver nor the person learns only who may approve (S7, ASVS V8.2.2).
+    if (!isApprover && !isPerson(forPerson, c.get("userId"))) {
+      return c.json(
+        { error: `Only ${approver?.displayName ?? "the approver"} can approve this.` },
+        403,
+      );
+    }
     const status = stateOf(a);
     const keys = await db
       .select()

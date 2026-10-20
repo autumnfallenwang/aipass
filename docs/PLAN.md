@@ -462,6 +462,7 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-20 | **ASVS L2 self-check:** 85 met, 73 partly, 29 not met, 49 N/A, 17 delegated (of 253). The first pass found and we fixed: CSRF on aipass's own APIs, approvals readable by any signed-in user, SSO providers registrable by anyone, an open redirect after sign-in, a spoofable client address for sign-in limits, discovery following redirects, and missing security logs. Top open gaps: admin MFA, session lifetimes, password checks |
 | 2026-10-20 | **D12 amended (owner):** we're early, so no more time goes into CI/CD or deployment. The files stay, used for localhost test runs and the dev loop only. No k3s; the image release runs by hand only |
 | 2026-10-20 | **S7 ✅ v1.0.0.** D15 (how aipass ships; Cedar and Permission Tickets not adopted yet). Owner-gated items are still open: filing the S4 issues, a person's README run, the real-phone passkey, and the Google and Epic cells |
 | 2026-10-20 | **Surprise:** the first container stack graded C. The api reached the gateway at its public URL, which inside a container isn't the gateway, and some probes "passed" because nothing came back. Fixes: `GATEWAY_INTERNAL_URL`, and the check now runs a control first (no allowed read means no probes, grade F) |

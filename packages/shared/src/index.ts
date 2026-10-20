@@ -195,3 +195,70 @@ export function isLoopbackUrl(url: string | undefined): boolean {
     return false;
   }
 }
+
+/**
+ * Where to go after sign-in, from a `?next=` value: only a path on this
+ * origin. Anything else (`//evil.example`, `/\\evil`, `https://…`) is dropped,
+ * so a crafted link can't send someone off-site after they sign in.
+ */
+export function safeNextPath(next: string | null | undefined): string | null {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\"))
+    return null;
+  for (const ch of next) if (ch.charCodeAt(0) < 0x20) return null;
+  return next;
+}
+
+const IP_CHARS = /^[0-9a-fA-F:.]+$/;
+
+function ipv4ToInt(ip: string): number | null {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) {
+    return null;
+  }
+  return (
+    ((parts[0] ?? 0) << 24) | ((parts[1] ?? 0) << 16) | ((parts[2] ?? 0) << 8) | (parts[3] ?? 0)
+  );
+}
+
+/** True when `ip` is one of the trusted proxies: exact addresses, or IPv4 CIDR ranges. */
+export function isTrustedProxy(ip: string, trusted: readonly string[]): boolean {
+  const bare = ip.replace(/^::ffff:/, "");
+  for (const t of trusted) {
+    const [net, bits] = t.split("/");
+    if (!net) continue;
+    if (bits === undefined) {
+      if (bare === net || ip === net) return true;
+      continue;
+    }
+    const a = ipv4ToInt(bare);
+    const b = ipv4ToInt(net);
+    const n = Number(bits);
+    if (a === null || b === null || !(n >= 0 && n <= 32)) continue;
+    const mask = n === 0 ? 0 : (~0 << (32 - n)) >>> 0;
+    if ((a & mask) >>> 0 === (b & mask) >>> 0) return true;
+  }
+  return false;
+}
+
+/**
+ * The caller's address: the socket's, unless the socket is a trusted proxy;
+ * then the rightmost `X-Forwarded-For` entry that isn't one. A client can't
+ * pick its own address by sending the header.
+ */
+export function clientAddress(
+  socket: string | undefined,
+  forwardedFor: string | undefined,
+  trusted: readonly string[],
+): string {
+  if (!socket) return "unknown";
+  if (!forwardedFor || !isTrustedProxy(socket, trusted)) return socket;
+  const hops = forwardedFor
+    .split(",")
+    .map((h) => h.trim())
+    .filter((h) => IP_CHARS.test(h));
+  for (let i = hops.length - 1; i >= 0; i--) {
+    const hop = hops[i] as string;
+    if (!isTrustedProxy(hop, trusted)) return hop;
+  }
+  return socket;
+}
