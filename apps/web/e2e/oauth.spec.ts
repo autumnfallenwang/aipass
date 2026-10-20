@@ -128,12 +128,14 @@ test("when the admin withdraws the app, its next call is refused", async ({ page
     .getByRole("button", { name: "Apps" })
     .click();
   await page.getByRole("button", { name: `Remove ${coach.clientId()}` }).click();
+  await expect(page.getByTestId("allowed-apps")).not.toContainText(coach.clientId());
   const r = await coach.call("search_labs");
   expect(r.refused).toBe(true);
   expect(r.text).toContain("this app isn't approved to act as Diabetes Coach");
   // put it back for the next test
   await page.getByRole("combobox", { name: "Allow a registered app" }).click();
   await page.getByRole("option", { name: /aipass e2e client/ }).click();
+  await expect(page.getByTestId("allowed-apps")).toContainText(coach.clientId());
   expect((await coach.call("search_labs")).refused).toBe(false);
 });
 
