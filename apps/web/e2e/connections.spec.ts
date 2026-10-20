@@ -63,3 +63,31 @@ for (const [who, username, password, code] of [
     expect(me.status()).toBe(401);
   });
 }
+
+test("disabling the connection stops a sign-in already under way", async ({ browser }) => {
+  const admin = await (await browser.newContext()).newPage();
+  await signIn(admin);
+  const page = await (await browser.newContext()).newPage();
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Sign in with Sunrise Clinic login" }).click();
+  await expect(page).toHaveURL(/localhost:8180\/realms\/sunrise/);
+  // the admin switches it off while Maria is at the hospital's login page
+  const off = await admin.request.post(
+    `${E2E.web}/api/admin/connections/sunrise-clinic-login/disable`,
+  );
+  expect(off.status()).toBe(200);
+  await page.getByLabel(/username/i).fill("maria");
+  await page.getByLabel("Password", { exact: true }).fill("maria-kc-password");
+  await page.getByRole("button", { name: /sign in/i }).click();
+  // Keycloak is on an internal host, so its origin stops being trusted first
+  // (discovery_failed); for a public login, the resolver refuses it
+  // (connection_disabled, tested in the api's exchange tests).
+  await expect(page).toHaveURL(/error=(discovery_failed|connection_disabled)/);
+  expect((await page.request.get(`${E2E.web}/api/me`)).status()).toBe(401);
+  // and its button is gone
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Sign in with Sunrise Clinic login" })).toHaveCount(
+    0,
+  );
+  await admin.request.post(`${E2E.web}/api/admin/connections/sunrise-clinic-login/enable`);
+});

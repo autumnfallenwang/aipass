@@ -3,7 +3,7 @@ import { cimd } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
-import { sso } from "@better-auth/sso";
+import { type SSOOptions, sso } from "@better-auth/sso";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { jwt } from "better-auth/plugins";
@@ -44,6 +44,50 @@ export function isInternalHost(hostname: string): boolean {
     /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
     /^(::1|f[cd][0-9a-f]{2}:)/i.test(h)
   );
+}
+
+type SsoResolver = NonNullable<SSOOptions["resolveUser"]>;
+
+/**
+ * Who someone signing in with a connected login (S6) is in aipass: their
+ * existing login, linked by an email the provider says is verified, and only
+ * while the admin trusts that connection. Nobody is signed up this way.
+ */
+export function ssoUserResolver(db: Db): SsoResolver {
+  return async (input, { database }) => {
+    // A disabled connection signs nobody in, even mid-flight.
+    const [conn] = await db
+      .select({ id: connections.id })
+      .from(connections)
+      .where(and(eq(connections.ssoProviderId, input.providerId), eq(connections.enabled, true)));
+    if (!conn) {
+      return {
+        action: "reject",
+        code: "connection_disabled",
+        message: "this login isn't trusted by aipass right now",
+      };
+    }
+    const { email, emailVerified } = input.providerUser;
+    if (!emailVerified) {
+      return {
+        action: "reject",
+        code: "email_not_verified",
+        message: "your login provider hasn't verified your email",
+      };
+    }
+    const existing = await database.findOne<{ id: string }>({
+      model: "user",
+      where: [{ field: "email", value: email.toLowerCase() }],
+    });
+    // No sign-up through a connection: logins come from the admin.
+    return existing
+      ? { action: "link", userId: existing.id, profile: "preserve" }
+      : {
+          action: "reject",
+          code: "no_account",
+          message: "ask your clinic's aipass admin to give you a login",
+        };
+  };
 }
 
 export function createAuth(db: Db) {
@@ -125,31 +169,7 @@ export function createAuth(db: Db) {
         // A connection is an identity provider the admin chose to trust, so
         // its email_verified claim counts (and is required, below).
         trustEmailVerified: true,
-        // Someone signing in with a connected login (S6) is linked to their
-        // existing aipass account, and only when the provider says the email
-        // is verified.
-        resolveUser: async (input, { database }) => {
-          const { email, emailVerified } = input.providerUser;
-          if (!emailVerified) {
-            return {
-              action: "reject",
-              code: "email_not_verified",
-              message: "your login provider hasn't verified your email",
-            };
-          }
-          const existing = await database.findOne<{ id: string }>({
-            model: "user",
-            where: [{ field: "email", value: email.toLowerCase() }],
-          });
-          // No sign-up through a connection: logins come from the admin.
-          return existing
-            ? { action: "link", userId: existing.id, profile: "preserve" }
-            : {
-                action: "reject",
-                code: "no_account",
-                message: "ask your clinic's aipass admin to give you a login",
-              };
-        },
+        resolveUser: ssoUserResolver(db),
       }),
       cimd({
         fetchClientMetadataResource,

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "aipass-coach": {
+      "type": "http",
+      "url": "http://localhost:3002/agents/diabetes-coach/mcp",
+      "headersHelper": "./scripts/exchange-header.sh --agent diabetes-coach"
+    }
+  }
+}

@@ -29,17 +29,17 @@ import { api, type FhirServer, useApi } from "@/lib/api";
 
 function AddServer({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ name: "", baseUrl: "", clientId: "", clientSecret: "" });
+  const [f, setF] = useState({ name: "", baseUrl: "", clientId: "", clientSecret: "", scope: "" });
   const [redirect, setRedirect] = useState<string | null>(null);
   async function submit(e: SubmitEvent) {
     e.preventDefault();
     try {
       const made = await api<{ redirectUri: string }>("/admin/fhir-servers", {
         method: "POST",
-        json: { ...f, clientSecret: f.clientSecret || undefined },
+        json: { ...f, clientSecret: f.clientSecret || undefined, scope: f.scope || undefined },
       });
       setRedirect(made.redirectUri);
-      setF({ name: "", baseUrl: "", clientId: "", clientSecret: "" });
+      setF({ name: "", baseUrl: "", clientId: "", clientSecret: "", scope: "" });
       onDone();
     } catch (err) {
       toast.error((err as Error).message);
@@ -101,6 +101,7 @@ function AddServer({ onDone }: { onDone: () => void }) {
             {field("baseUrl", "FHIR base URL", "url")}
             {field("clientId", "SMART client ID")}
             {field("clientSecret", "SMART client secret (confidential apps)", "password", false)}
+            {field("scope", "Scopes (leave empty for SMART v2 read + add readings)", "text", false)}
             <DialogFooter>
               <Button type="submit">Add</Button>
             </DialogFooter>

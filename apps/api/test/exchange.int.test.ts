@@ -5,8 +5,9 @@
  */
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { createDb, runMigrations, seedDemo } from "@aipass/db";
+import { connections, createDb, runMigrations, seedDemo, users } from "@aipass/db";
 import { FhirClient } from "@aipass/fhir";
+import { eq } from "drizzle-orm";
 import {
   type CryptoKey,
   decodeJwt,
@@ -18,7 +19,7 @@ import {
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.ts";
-import { createAuth } from "../src/auth.ts";
+import { createAuth, ssoUserResolver } from "../src/auth.ts";
 import { config } from "../src/config.ts";
 import { TOKEN_EXCHANGE } from "../src/token-exchange.ts";
 
@@ -32,6 +33,7 @@ const ACCESS_TOKEN = "urn:ietf:params:oauth:token-type:access_token";
 
 let app: ReturnType<typeof createApp>;
 let close: () => Promise<void>;
+let db: ReturnType<typeof createDb>["db"];
 let admin = "";
 let client = { id: "", secret: "" };
 let testIdp: Server;
@@ -111,6 +113,7 @@ beforeAll(async () => {
   await runMigrations(DB);
   const made = createDb(DB);
   close = made.close;
+  db = made.db;
   await seedDemo(made.db);
   app = createApp({
     db: made.db,
@@ -302,6 +305,73 @@ describe("RFC 8693 token exchange", () => {
     await app.request("/api/admin/connections/sunrise-clinic-login/enable", {
       method: "POST",
       headers: { cookie: admin, origin: ORIGIN },
+    });
+  });
+});
+
+describe("sign-in through a connection: who it links to", () => {
+  // Better Auth calls this on every SSO callback, inside its transaction.
+  const tx = {
+    findOne: async ({ where }: { where: { value: string }[] }) => {
+      const [u] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, where[0]?.value ?? ""));
+      return u ?? null;
+    },
+  };
+  const attempt = (providerId: string, email: string, emailVerified = true) =>
+    ssoUserResolver(db)(
+      {
+        protocol: "oidc",
+        providerId,
+        accountKey: { issuer: "https://login.example", accountId: "x" },
+        providerUser: { email, emailVerified, name: "x" },
+        providerReference: {} as never,
+        providerClaims: {},
+        verifiedIdTokenClaims: {},
+      },
+      { database: tx as never },
+    );
+
+  beforeAll(async () => {
+    await db
+      .insert(connections)
+      .values({
+        id: "public-login",
+        name: "A public login",
+        issuer: "https://login.example",
+        jwksUri: "https://login.example/jwks",
+        audience: "aipass",
+        ssoProviderId: "public-login",
+      })
+      .onConflictDoNothing();
+  });
+
+  it("links a verified email to the existing aipass login", async () => {
+    const r = await attempt("public-login", "Maria@Example.org");
+    expect(r).toMatchObject({ action: "link", profile: "preserve" });
+  });
+
+  it("refuses an unverified email, and anyone without a login (no sign-up)", async () => {
+    expect(await attempt("public-login", "maria@example.org", false)).toMatchObject({
+      action: "reject",
+      code: "email_not_verified",
+    });
+    expect(await attempt("public-login", "stranger@example.org")).toMatchObject({
+      action: "reject",
+      code: "no_account",
+    });
+  });
+
+  it("refuses everyone once the admin disables the connection, and unknown providers", async () => {
+    await db.update(connections).set({ enabled: false }).where(eq(connections.id, "public-login"));
+    expect(await attempt("public-login", "maria@example.org")).toMatchObject({
+      action: "reject",
+      code: "connection_disabled",
+    });
+    expect(await attempt("never-connected", "maria@example.org")).toMatchObject({
+      code: "connection_disabled",
     });
   });
 });

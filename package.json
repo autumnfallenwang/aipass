@@ -25,7 +25,9 @@
     "pass": "tsx apps/api/scripts/pass.ts",
     "admin": "tsx apps/api/scripts/admin.ts",
     "test:e2e": "pnpm --filter @aipass/web test:e2e",
-    "check": "tsx packages/check/src/cli.ts"
+    "check": "tsx packages/check/src/cli.ts",
+    "smart:url": "tsx scripts/smart-launcher-url.ts",
+    "services:up:all": "docker compose -f deploy/compose.yaml --profile keycloak --profile smart up -d --wait"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

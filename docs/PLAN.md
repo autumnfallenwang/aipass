@@ -390,16 +390,18 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - `deploy/compose.yaml` gains a Keycloak profile; the README gains "use your own login" and "use your own FHIR server" guides.
 
 **Build:**
-- [ ] Connections (admin screen + api)
-- [ ] `/token` exchange grant
-- [ ] SMART client + vault in the gateway
-- [ ] FHIR target config (multiple servers)
+- [x] Connections (admin screen + api), with sign-in through them (Better Auth SSO): linked by verified email to an existing login only (D13)
+- [x] `/token` exchange grant (RFC 8693), as a Better Auth extension grant; headless clients from the agent's Apps dialog
+- [x] SMART client + vault in the gateway (D14); people connect their record from My AIs
+- [x] FHIR target config (multiple servers): *FHIR servers* page, and *Records from* per agent
+- [x] Guides: [use your own login](guides/own-login.md), [use your own FHIR server](guides/own-fhir-server.md); compose profiles `keycloak` and `smart` (the SMART launcher plays the EHR locally)
 
 **Validate:**
-- [ ] Matrix of {built-in login, Keycloak, Google} × {HAPI, Epic sandbox (read)}: the S1 demo works and **the Check suite is green** on every cell
-- [ ] Token exchange negative tests: untrusted issuer, wrong audience, missing actor authentication and an unknown claim are all refused
-- [ ] Probe: no upstream token ever appears in any tool result, header or log
-- [ ] Tag `v0.4.0`
+- [x] Matrix, the local cells: {aipass login, Keycloak} × {HAPI, EHR over SMART (launcher)}: the S1 call works and the Check is A (16/16) in all four, on every CI build. Real Claude Code ran in the Keycloak × SMART cell: [demo-s6](demo-s6.md)
+- [ ] ⏸ Matrix, the owner's cells: Google (needs a Google Cloud OAuth client) and the Epic sandbox (needs an Epic app registration). The steps are in the guides
+- [x] Token exchange negative tests: untrusted issuer, wrong key, wrong audience, missing or wrong actor authentication, `act`/`may_act`/`cnf`, unverified email, unknown person, unapproved agent, `actor_token` and unsupported token types are all refused
+- [x] Probe: no upstream token, refresh token, client secret or launcher settings ever appear in any tool result, response header, receipt, AuditEvent or log (`s6-upstream.int.test.ts`)
+- [x] Tag `v0.4.0`
 
 ---
 
@@ -410,6 +412,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 **Build and validate:**
 - [ ] Threat model doc; OWASP ASVS L2 self-check; dependency audit; signed releases (GitHub provenance)
 - [ ] Docker images + `docker compose up` from a clean machine in < 10 min (time it). Validated on localhost; nothing is deployed (D12)
+- [ ] Vault key rotation (S6 seals with one key; today a new key means people reconnect)
 - [ ] Optional, evidence-driven:
   - SMART **Permission Tickets** as the grant format
   - **Cedar**, if the rules have outgrown plain TypeScript
@@ -445,8 +448,8 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 | S3 Real login + person's yes → v0.2 | ✅ done | Oct 19 | real Claude Code over OAuth; v0.2.0 |
 | S4 Health check | ✅ done | Oct 19 | 12/12 planted defects caught; 2 external scorecards; filing issues waits for the owner |
 | S5 Approved changes → v0.3 | ✅ done | Oct 19 | A1–A8 green; real Claude proposed → passkey → commit; a real-phone run waits for the owner |
-| S6 Any environment → v0.4 | 🟡 next | Dec 17 – Jan 14 | |
-| S7 Hardening → v1.0 | ⬜ | Jan 14 – Feb | |
+| S6 Any environment → v0.4 | ✅ done | Oct 20 | 4 local matrix cells green incl. the full check; real Claude Code as a headless agent; Google and Epic cells wait for the owner's registrations |
+| S7 Hardening → v1.0 | 🟡 next | Jan 14 – Feb | |
 
 _States: ⬜ not started · 🟡 in progress · ✅ done · ❌ blocked (say by what)._
 
@@ -456,6 +459,10 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-20 | **S6 ✅ v0.4.0.** D13 (connections, one hop, no sign-up), D14 (the gateway is the SMART app; the vault). Real Claude Code exchanged Maria's Keycloak token for a pass and read her A1c from the EHR; disconnecting her record and disabling the login each stopped it |
+| 2026-10-20 | **Surprise:** the SMART launcher keeps its settings, client secret included, in its FHIR URL. Records from another server are now named by server id in the audit trail, agents see only `Type/id`, and no FHIR error message carries a URL |
+| 2026-10-20 | **Surprise (Better Auth SSO 1.7.11):** it won't fetch discovery from private hosts unless their origin is trusted; it ignores `email_verified` unless `trustEmailVerified` is on; and a `resolveUser` hook needs an adapter with transactions. Trusted origins now come from enabled connections on internal hosts, read per request, and fall back to our own origin when the database isn't there yet (CI starts the api before the e2e database exists) |
+| 2026-10-20 | **Surprise (tests):** the e2e reset didn't clear the new tables, so a leftover connection from the previous run made a "create" test pass on old data. The reset now clears them, and the test waits for the dialog to close |
 | 2026-10-19 | **S5 ✅ v0.3.0.** SP5: yes (same passkey rows; we add required user verification). 16 probes, 16 planted defects, all caught; scorecards updated (wso2 wrote a reading with no approval; fhirHydrant is read-only by default) |
 | 2026-10-19 | **Surprise:** HAPI reuses cached search results for about a minute. After tests deleted records, a "newest first" page still listed them, which hid Maria's A1c from a probe. The dev compose file now sets `reuse_cached_search_results_millis: 0`, and the check cleans up every reading it writes |
 | 2026-10-19 | **D12:** develop and test on localhost only; no deployment to the owner's k3s. Deployment artifacts are for adopters |
