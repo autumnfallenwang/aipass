@@ -7,17 +7,49 @@
       "resource": {
         "resourceType": "Patient",
         "id": "john",
-        "meta": { "tag": [{ "system": "https://aipass.dev/fixture", "code": "synthetic" }] },
-        "identifier": [{ "system": "https://sunrise-clinic.example/mrn", "value": "SC-100871" }],
-        "name": [{ "use": "official", "family": "Carter", "given": ["John"] }],
-        "telecom": [{ "system": "phone", "value": "555-0199", "use": "mobile" }],
+        "meta": {
+          "tag": [
+            {
+              "system": "https://aipass.dev/fixture",
+              "code": "synthetic"
+            }
+          ]
+        },
+        "identifier": [
+          {
+            "system": "https://sunrise-clinic.example/mrn",
+            "value": "SC-100871"
+          }
+        ],
+        "name": [
+          {
+            "use": "official",
+            "family": "Carter",
+            "given": ["John"]
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "555-0199",
+            "use": "mobile"
+          }
+        ],
         "gender": "male",
         "birthDate": "1965-11-02",
         "address": [
-          { "line": ["4 Elm St"], "city": "Springfield", "state": "MA", "postalCode": "01103" }
+          {
+            "line": ["4 Elm St"],
+            "city": "Springfield",
+            "state": "MA",
+            "postalCode": "01103"
+          }
         ]
       },
-      "request": { "method": "PUT", "url": "Patient/john" }
+      "request": {
+        "method": "PUT",
+        "url": "Patient/john"
+      }
     },
     {
       "resource": {
@@ -44,7 +76,9 @@
           ],
           "text": "Hemoglobin A1c"
         },
-        "subject": { "reference": "Patient/john" },
+        "subject": {
+          "reference": "Patient/john"
+        },
         "effectiveDateTime": "2026-08-11",
         "valueQuantity": {
           "value": 9.4,
@@ -53,7 +87,10 @@
           "code": "%"
         }
       },
-      "request": { "method": "PUT", "url": "Observation/john-a1c-1" }
+      "request": {
+        "method": "PUT",
+        "url": "Observation/john-a1c-1"
+      }
     },
     {
       "resource": {
@@ -80,7 +117,9 @@
           ],
           "text": "Blood pressure"
         },
-        "subject": { "reference": "Patient/john" },
+        "subject": {
+          "reference": "Patient/john"
+        },
         "effectiveDateTime": "2026-08-11",
         "component": [
           {
@@ -119,7 +158,10 @@
           }
         ]
       },
-      "request": { "method": "PUT", "url": "Observation/john-bp-1" }
+      "request": {
+        "method": "PUT",
+        "url": "Observation/john-bp-1"
+      }
     },
     {
       "resource": {
@@ -152,28 +194,77 @@
           ],
           "text": "HIV infection"
         },
-        "subject": { "reference": "Patient/john" },
+        "subject": {
+          "reference": "Patient/john"
+        },
         "onsetDateTime": "2012-03-01"
       },
-      "request": { "method": "PUT", "url": "Condition/john-cond-hiv" }
+      "request": {
+        "method": "PUT",
+        "url": "Condition/john-cond-hiv"
+      }
     },
     {
       "resource": {
         "resourceType": "Appointment",
         "id": "john-appt-1",
         "status": "booked",
-        "serviceType": [{ "text": "Annual physical" }],
+        "serviceType": [
+          {
+            "text": "Annual physical"
+          }
+        ],
         "description": "Annual physical",
         "start": "2026-11-12T13:00:00Z",
         "end": "2026-11-12T13:30:00Z",
         "participant": [
           {
-            "actor": { "reference": "Patient/john", "display": "John Carter" },
+            "actor": {
+              "reference": "Patient/john",
+              "display": "John Carter"
+            },
             "status": "accepted"
           }
         ]
       },
-      "request": { "method": "PUT", "url": "Appointment/john-appt-1" }
+      "request": {
+        "method": "PUT",
+        "url": "Appointment/john-appt-1"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "DocumentReference",
+        "id": "john-note-1",
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "11506-3",
+              "display": "Progress note"
+            }
+          ],
+          "text": "Annual physical note"
+        },
+        "subject": {
+          "reference": "Patient/john"
+        },
+        "date": "2026-08-11T09:00:00Z",
+        "description": "Annual physical note",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "QW5udWFsIHBoeXNpY2FsLiBBMWMgOS40JS4gU3RhcnQgbWV0Zm9ybWluLg=="
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "DocumentReference/john-note-1"
+      }
     }
   ]
 }

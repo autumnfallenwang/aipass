@@ -1,11 +1,13 @@
+import { createDb } from "@aipass/db";
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { createGateway } from "./app.ts";
+import { loadConfig } from "./config.ts";
 
-const port = Number(process.env.GATEWAY_PORT ?? 3002);
+const config = loadConfig();
+const { db } = createDb(config.databaseUrl);
+const { app } = createGateway({ db, config });
 
-const app = new Hono();
-app.get("/health", (c) => c.json({ status: "ok", service: "aipass-gateway" }));
-
-serve({ fetch: app.fetch, port }, (info) => {
+serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.info(`aipass gateway listening on http://localhost:${info.port}`);
+  console.info(`  agents at ${config.gatewayUrl}/agents/<agent-id>/mcp`);
 });

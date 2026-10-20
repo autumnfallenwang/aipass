@@ -1,11 +1,15 @@
+import { createDb } from "@aipass/db";
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { getConnInfo } from "@hono/node-server/conninfo";
+import { createApp } from "./app.ts";
+import { config } from "./config.ts";
 
-const port = Number(process.env.API_PORT ?? 3001);
+const { db } = createDb(config.databaseUrl);
+const app = createApp({
+  db,
+  remoteAddr: (c) => getConnInfo(c).remote.address,
+});
 
-const app = new Hono();
-app.get("/health", (c) => c.json({ status: "ok", service: "aipass-api" }));
-
-serve({ fetch: app.fetch, port }, (info) => {
+serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.info(`aipass api listening on http://localhost:${info.port}`);
 });

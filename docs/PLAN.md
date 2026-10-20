@@ -9,7 +9,7 @@ _This one file is both the plan and the tracker. When a stage changes state, upd
 A clinic admin decides what each AI agent may see and do (its **role**). The person an agent acts for, such as Maria the patient, agrees to it (her **grant**). The agent carries a short-lived **pass** that names both the agent and the person. Every request goes through the **gateway**, which re-checks the role, the grant and the record's sensitivity labels *live*. It shows the agent only its role's view of the chart, and it holds any change until the person approves it with their passkey. Each request leaves a **receipt**, in plain English and in the FHIR record's own audit log.
 
 **Maria example used in every stage:**
-- **Diabetes Coach:** labs, vitals, medications, conditions and visit notes; may *propose* a glucose reading.
+- **Diabetes Coach:** labs, vitals, medications, conditions, visit notes, and her name and age; may *propose* a glucose reading.
 - **Scheduling Assistant:** her name, phone number and appointments only.
 - **Neither agent** ever sees anything labelled sensitive: her therapy notes, depression, antidepressant, past alcohol treatment, or her therapy appointments. The data is in [`fixtures/`](../fixtures/README.md).
 
@@ -51,6 +51,7 @@ aipass/
   apps/api          Hono + Better Auth 1.7: the "front office"
   apps/gateway      Hono + MCP TS SDK v2: the "door guard" (the only thing AI clients talk to)
   packages/shared   Zod schemas + types shared by all apps
+  packages/db       Drizzle schema, migrations, hash-chained receipts, demo seed (api and gateway both use it)
   packages/policy   pure TypeScript decision engine: NO framework imports, so it can be tested on its own
   packages/fhir     FHIR helpers: resource groups, labels, patient compartment, AuditEvent/Provenance builders
   packages/check    health-check probes + CLI (S4)
@@ -200,12 +201,12 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
   | `get_notes` | exists to demonstrate refusals |
 
 **Build:**
-- [ ] `packages/policy`: `decide(context) → {decision, reason, rule}` implementing rules 1–6; table-driven tests
-- [ ] `packages/fhir`: group↔FHIR mapping, label reader, compartment check, field mask, receipt sentence, AuditEvent builder
-- [ ] api: Drizzle schema (agents, roles, persons, grants, receipts); seed script with the two Maria roles; JWKS; dev pass command
-- [ ] gateway: MCP server (Streamable HTTP), the 7 tools, pass verification, live checks, response filter, receipts + AuditEvent to HAPI
-- [ ] gateway returns `401` with `WWW-Authenticate` pointing to its Protected Resource Metadata (RFC 9728) when the pass is missing or invalid
-- [ ] `docs/demo-s1.md`: the exact steps to rerun the demo
+- [x] `packages/policy`: `decideRequest` (rules 1–4) and `decideResource` (rules 3, 5, 6) → `{decision, rule, code, reason}`; rule 0 = the check itself failed (refuse); table-driven tests
+- [x] `packages/fhir`: group↔FHIR mapping, label reader, compartment check, field mask, simplified records, receipt sentence, AuditEvent/Provenance/Device builders, FHIR client that only calls its own base URL
+- [x] `packages/db` + api: Drizzle schema (agents, roles, persons, grants, receipts, pass keys); hash-chained receipts; seed with the two Maria roles; JWKS at `/.well-known/jwks.json`; `pnpm pass`; `pnpm admin` (stop/resume agent, revoke/restore grant, show receipts)
+- [x] gateway: MCP server per agent (`/agents/{id}/mcp`, SDK v2), the 7 tools with strict argument schemas, pass verification, live checks, response filter on every record and every page, encrypted paging tokens, receipts + AuditEvent to HAPI (an allowed read with no AuditEvent is refused: fail closed)
+- [x] gateway returns `401` with `WWW-Authenticate` pointing to its Protected Resource Metadata (RFC 9728) when the pass is missing or invalid, and writes a receipt for it
+- [x] [`docs/demo-s1.md`](demo-s1.md): the exact steps to rerun the demo
 
 **Validate:**
 
@@ -221,9 +222,9 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 | Expired / wrong-aud / tampered / missing pass | 401 + PRM pointer |
 | `_include` or `$everything` trying to reach other groups | refused or filtered; nothing outside the role leaves |
 
-- [ ] Every row above is an automated test (policy unit tests + gateway integration tests against HAPI)
-- [ ] **Every refused call has a receipt** and an AuditEvent naming both the AI and Maria
-- [ ] Manual demo with real Claude Code, three prompts: *"What were my last A1c results?"* (answers), *"Summarize my therapy notes"* (refusal, with the reason), then stop the agent and ask again (refused)
+- [x] Every row above is an automated test: 31 policy + 27 FHIR + 5 paging unit tests, and 28 gateway integration tests against Postgres + HAPI with a real MCP client (`apps/gateway/test/s1-*.int.test.ts`). Extra cases: a forged `patient` claim, a direct read of John's note, a FHIR server that smuggles in other patients/labels/groups/types, edited and moved page tokens, MCP 2025-11-25 fallback
+- [x] **Every refused call has a receipt** and an AuditEvent naming both the AI (`Device`, requestor false, `policy` = pass jti) and Maria (requestor true); the receipt hash chain verifies
+- [x] Manual demo with real Claude Code 2.1.301 (`claude -p`, headersHelper), three prompts. A1c: answered 6.9 / 7.4 / 8.1%. Therapy notes: showed the visit note and said one record is private (mental health). Agent stopped: *"refused … agent stopped by admin"*. Scheduling Assistant: two appointments, the therapy session withheld, A1c refused (*not in the Scheduling Assistant role*)
 
 ---
 
@@ -431,8 +432,8 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 | Stage | State | Dates | Note |
 |---|---|---|---|
 | S0 Foundation + spikes | ✅ done | Oct 19 | all 4 spikes answered; SP2 changed the MCP SDK (D8), SP1 led to one URL per agent (D9) |
-| S1 The guard (read-only) | 🟡 next | Oct 26 – Nov 3 | |
-| S2 Admin UI v1 → v0.1 | ⬜ | Nov 3–12 | public release |
+| S1 The guard (read-only) | ✅ done | Oct 19 | all validation rows automated; real Claude Code demo run |
+| S2 Admin UI v1 → v0.1 | 🟡 next | Nov 3–12 | public release |
 | S3 Real login + person's yes → v0.2 | ⬜ | Nov 13–24 | |
 | S4 Health check | ⬜ | Nov 24 – Dec 3 | external scorecards |
 | S5 Approved changes → v0.3 | ⬜ | Dec 3–17 | |
@@ -447,6 +448,10 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-19 | **S1 ✅** 63 unit + 32 integration tests green; real Claude Code demo matches the plan |
+| 2026-10-19 | **Surprise:** Claude Code runs `headersHelper` once per connection and again only after a 401. Measured: with a 5 s pass, the call after expiry got `401 expired`, then a fresh pass (new jti) succeeded. Lowered clock-skew tolerance from 30 s to 10 s, which had let an expired pass through |
+| 2026-10-19 | **Surprise (demo):** asked for A1c, Claude also called `get_patient_summary` and was refused. The coach role now includes demographics, masked to name, birth date and gender |
+| 2026-10-19 | Unknown tool arguments (e.g. `_include`) were being silently dropped; they are now refused (strict schemas, rule 2: fail closed). The paging token was signed but readable, which exposed the FHIR address, so it is now encrypted (AES-256-GCM) |
 | 2026-10-19 | **S0 ✅** Fresh clone with no containers or volume → `pnpm dev` → all healthy in 27 s; CI green. Web typecheck now runs `next typegen` first, so `next-env.d.ts` is no longer committed |
 | 2026-10-19 | **S0 started.** Postgres moved to host port 5433 (5432 collides with other local Postgres). TypeScript 6.0.3, not 7.0 (TS 7 is the native port with no JS API yet, which Next.js type-checking needs) |
 | 2026-10-19 | **SP4 ✅** Maria + John hand-written, 2 Synthea patients trimmed; load is idempotent (~1.5 s) |

@@ -1,0 +1,78 @@
+import {
+  agentUrl,
+  PASS_MAX_SECONDS,
+  type PassClaims,
+  PassClaims as PassClaimsSchema,
+} from "@aipass/shared";
+import { createRemoteJWKSet, decodeJwt, errors, type JWTVerifyGetKey, jwtVerify } from "jose";
+import type { TrustedIssuer } from "./config.ts";
+
+export type PassResult = { ok: true; claims: PassClaims } | { ok: false; error: string };
+
+const ALLOWED_ALGS = ["ES256", "RS256", "EdDSA", "PS256"];
+const CLOCK_SKEW_SECONDS = 10;
+
+/**
+ * Verifies a pass offline: signature against a trusted issuer's keys, the
+ * audience is *this agent's* gateway URL, it hasn't expired, it isn't
+ * longer-lived than a pass may be, and it names this agent as the actor.
+ */
+export class PassVerifier {
+  private readonly keySets = new Map<string, JWTVerifyGetKey>();
+
+  constructor(
+    private readonly gatewayUrl: string,
+    issuers: TrustedIssuer[],
+    /** Tests inject local key sets here. */
+    keySets?: Map<string, JWTVerifyGetKey>,
+  ) {
+    for (const i of issuers) {
+      this.keySets.set(i.issuer, keySets?.get(i.issuer) ?? createRemoteJWKSet(new URL(i.jwksUri)));
+    }
+  }
+
+  async verify(authorization: string | undefined, agentId: string): Promise<PassResult> {
+    if (!authorization) return { ok: false, error: "missing" };
+    const m = authorization.match(/^Bearer\s+([A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$/);
+    if (!m?.[1]) return { ok: false, error: "malformed" };
+    const token = m[1];
+
+    let iss: string | undefined;
+    try {
+      iss = decodeJwt(token).iss;
+    } catch {
+      return { ok: false, error: "malformed" };
+    }
+    const keys = iss ? this.keySets.get(iss) : undefined;
+    if (!iss || !keys) return { ok: false, error: "untrusted issuer" };
+
+    const audience = agentUrl(this.gatewayUrl, agentId);
+    try {
+      const { payload } = await jwtVerify(token, keys, {
+        issuer: iss,
+        audience,
+        algorithms: ALLOWED_ALGS,
+        clockTolerance: CLOCK_SKEW_SECONDS,
+        requiredClaims: ["exp", "iat", "sub", "jti"],
+      });
+      const parsed = PassClaimsSchema.safeParse(payload);
+      if (!parsed.success) return { ok: false, error: "missing claims" };
+      const claims = parsed.data;
+      if (claims.exp - claims.iat > PASS_MAX_SECONDS + CLOCK_SKEW_SECONDS) {
+        return { ok: false, error: "lifetime too long" };
+      }
+      if (claims.act.sub !== agentId) return { ok: false, error: "issued to a different agent" };
+      return { ok: true, claims };
+    } catch (err) {
+      if (err instanceof errors.JWTExpired) return { ok: false, error: "expired" };
+      if (err instanceof errors.JWTClaimValidationFailed && err.claim === "aud") {
+        return { ok: false, error: "wrong audience" };
+      }
+      if (err instanceof errors.JWSSignatureVerificationFailed)
+        return { ok: false, error: "bad signature" };
+      if (err instanceof errors.JWKSNoMatchingKey)
+        return { ok: false, error: "unknown signing key" };
+      return { ok: false, error: "invalid" };
+    }
+  }
+}

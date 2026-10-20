@@ -5,7 +5,7 @@
 | File | Who | Why it's here |
 |---|---|---|
 | `maria.json` | Maria Santos (`Patient/maria`) | The demo patient. Hand-written so every rule has a case |
-| `john.json` | John Carter (`Patient/john`) | The "someone else" for wrong-patient tests. Has an `HIV`-labelled condition |
+| `john.json` | John Carter (`Patient/john`) | The "someone else" for wrong-patient tests. Has a lab, a note and an `HIV`-labelled condition |
 | `synthea/carlo.json` | A Synthea patient | Realistic, unlabelled background data |
 | `synthea/georgianna.json` | A Synthea patient | Realistic, unlabelled background data |
 

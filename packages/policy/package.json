@@ -10,7 +10,7 @@
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "vitest run --passWithNoTests --exclude '**/*.int.test.ts'",
-    "test:integration": "vitest run .int.test --passWithNoTests"
+    "test:integration": "vitest run .int.test --passWithNoTests --no-file-parallelism"
   },
   "dependencies": {
     "@aipass/shared": "workspace:*"
