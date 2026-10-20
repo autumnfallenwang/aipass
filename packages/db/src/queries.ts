@@ -1,7 +1,7 @@
 import { rulesToPermissions } from "@aipass/shared";
 import { and, eq, or } from "drizzle-orm";
 import type { Db } from "./index.ts";
-import { agents, grants, persons, roles } from "./schema.ts";
+import { agentClients, agents, grants, persons, roles } from "./schema.ts";
 
 /**
  * Everything the gateway needs to decide one call, read fresh from the
@@ -30,8 +30,16 @@ export async function loadCallContext(db: Db, agentId: string, personKey: string
           .where(and(eq(grants.personId, person.id), eq(grants.agentId, agentId)))
           .limit(1)
       : [];
+  const clients = agentRow
+    ? await db
+        .select({ clientId: agentClients.clientId })
+        .from(agentClients)
+        .where(eq(agentClients.agentId, agentId))
+    : [];
   const role = agentRow?.role ?? null;
   return {
+    /** OAuth clients the admin approved to connect as this agent. */
+    allowedClients: clients.map((c) => c.clientId),
     agent: agentRow?.agent ?? null,
     role: role ? { ...role, permissions: rulesToPermissions(role.rules) } : null,
     person: person ?? null,

@@ -6,6 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -61,6 +62,23 @@ export const persons = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("persons_user_id_idx").on(t.userId)],
+);
+
+/**
+ * Which AI apps (OAuth clients) may connect as which agent. The admin decides;
+ * Better Auth's own client↔resource links are kept in step with this table.
+ * Claude Code, for instance, is `https://claude.ai/oauth/claude-code-client-metadata`.
+ */
+export const agentClients = pgTable(
+  "agent_clients",
+  {
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.agentId, t.clientId] })],
 );
 
 /** The person's "yes", inside the role. */

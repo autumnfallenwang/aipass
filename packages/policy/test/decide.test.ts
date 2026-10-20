@@ -41,6 +41,13 @@ describe("decideRequest (rules 1–4)", () => {
     ],
     ["no role", { role: null }, "Diabetes Coach has no role", 3],
     [
+      "app not approved for this agent",
+      { client: { id: "https://evil.example/app", approved: false } },
+      "this app isn't approved to act as Diabetes Coach",
+      2,
+    ],
+    ["approved app", { client: { id: "claude-code", approved: true } }, null, null],
+    [
       "scheduling reads labs",
       { role: { name: "Scheduling Assistant", permissions: schedulingRole } },
       "not in the Scheduling Assistant role",

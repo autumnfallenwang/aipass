@@ -1,13 +1,17 @@
-import { type Db, users } from "@aipass/db";
+import type { Db } from "@aipass/db";
 import type { FhirClient } from "@aipass/fhir";
-import { count } from "drizzle-orm";
+import {
+  oauthProviderAuthServerMetadata,
+  oauthProviderOpenIdConfigMetadata,
+} from "@better-auth/oauth-provider";
 import { type Context, Hono } from "hono";
 import * as z from "zod";
 import { adminRoutes } from "./admin.ts";
-import type { Auth } from "./auth.ts";
+import { type Auth, adminExists } from "./auth.ts";
 import { config } from "./config.ts";
 import { publicJwks } from "./keys.ts";
 import { mintPass, PassError } from "./pass.ts";
+import { personRoutes } from "./person.ts";
 
 function isLoopback(addr: string | undefined): boolean {
   return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
@@ -33,14 +37,18 @@ export function createApp(deps: ApiDeps) {
     return c.json(await publicJwks(db));
   });
 
-  // Better Auth: sign-up, sign-in, sessions, passkeys.
+  // Better Auth: sign-up, sign-in, sessions, passkeys, and the OAuth server for AI apps.
   app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
+  // RFC 8414 / OIDC discovery for the issuer `<public origin>/api/auth` (the web
+  // app passes these paths through, D10).
+  const asMetadata = oauthProviderAuthServerMetadata(auth);
+  const oidcMetadata = oauthProviderOpenIdConfigMetadata(auth);
+  app.get("/.well-known/oauth-authorization-server/api/auth", (c) => asMetadata(c.req.raw));
+  app.get("/.well-known/openid-configuration/api/auth", (c) => oidcMetadata(c.req.raw));
+
   // Whether this install still needs its first (admin) account.
-  app.get("/api/setup", async (c) => {
-    const [row] = await db.select({ n: count() }).from(users);
-    return c.json({ needsAdmin: (row?.n ?? 0) === 0 });
-  });
+  app.get("/api/setup", async (c) => c.json({ needsAdmin: !(await adminExists(db)) }));
 
   app.get("/api/me", async (c) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
@@ -50,6 +58,7 @@ export function createApp(deps: ApiDeps) {
   });
 
   app.route("/api/admin", adminRoutes({ db, auth, fhir: deps.fhir, fetch: deps.fetch }));
+  app.route("/api/person", personRoutes({ db, auth }));
 
   // Dev passes (S1): only when AIPASS_DEV_PASSES=1, and only from this machine.
   app.post("/dev/passes", async (c) => {

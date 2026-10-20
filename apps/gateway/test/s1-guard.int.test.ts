@@ -270,7 +270,7 @@ describe("S1: the guard, read-only", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({
         resource: url,
-        authorization_servers: [`${h.config.apiUrl}/api/auth`],
+        authorization_servers: h.config.authorizationServers,
       });
     });
 

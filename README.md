@@ -11,7 +11,8 @@ Let AI help with your health records, on your terms: it sees only what you allow
 - **Shows the admin exactly what each AI sees.** "Preview as this role" opens a person's chart through the same checks the AI goes through.
 - **Writes a receipt for every request**, refusals included. Each one is a plain-English sentence plus an AuditEvent in the FHIR record's own audit log, naming both the AI and the person.
 - **Stops instantly.** When the admin clicks Stop, the AI's very next call is refused (measured: under 0.1 s).
-- *Coming next:* the person's own consent and "My AIs" page (S3), and changes that wait for the person's passkey (S5). See the [plan](docs/PLAN.md).
+- **Lets the person decide.** An AI app signs in with OAuth. The person sees exactly what it asks for, can untick anything, and can revoke it later on their "My AIs" page.
+- *Coming next:* changes that wait for the person's passkey (S5). See the [plan](docs/PLAN.md).
 
 It works with any login system (identity provider) and any FHIR server, and you host it yourself.
 
@@ -40,7 +41,8 @@ Then:
    - her name, her phone number and two appointments;
    - "1 withheld: *mental-health records are always private*" (that is her therapy appointment);
    - everything else hidden (*not in the Scheduling Assistant role*).
-4. Connect a real AI. [`docs/demo-s1.md`](docs/demo-s1.md) shows Claude Code reading Maria's A1c, being refused her therapy notes, and being cut off when you stop it (**Stop** on the Agents page).
+4. Connect a real AI with just its gateway URL. In [`docs/demo-s3.md`](docs/demo-s3.md), Claude Code signs in through aipass and Maria consents. She unticks vital signs, and later revokes the AI on her "My AIs" page. Her demo login is `maria@example.org` / `maria-demo-password`.
+   *(For agents without a browser, [`docs/demo-s1.md`](docs/demo-s1.md) uses a short-lived pass from a helper script instead.)*
 5. **Activity** shows a receipt for every request. **Verify chain** checks that none has been edited or removed.
 
 While `pnpm dev` runs, `pnpm smoke` in a second terminal checks that every service is healthy.
@@ -80,6 +82,6 @@ pnpm test:e2e           # the admin UI in a real browser, plus an MCP client pla
 
 ## Status
 
-**v0.1** (admin UI). The plan, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
+**v0.2** (OAuth login for AI apps, the person's consent and "My AIs"). The plan, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
 
 No licence has been chosen yet, so all rights are reserved for now (see [decisions](docs/decisions.md)).

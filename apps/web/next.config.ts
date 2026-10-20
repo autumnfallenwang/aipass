@@ -12,7 +12,18 @@ const config: NextConfig = {
   // (Better Auth, admin API) is passed through to the api. Cookies and
   // passkeys therefore belong to a single origin.
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${apiUrl}/api/:path*` }];
+    return [
+      { source: "/api/:path*", destination: `${apiUrl}/api/:path*` },
+      // OAuth discovery for the issuer `<this origin>/api/auth` (RFC 8414 path form).
+      {
+        source: "/.well-known/oauth-authorization-server/api/auth",
+        destination: `${apiUrl}/.well-known/oauth-authorization-server/api/auth`,
+      },
+      {
+        source: "/.well-known/openid-configuration/api/auth",
+        destination: `${apiUrl}/.well-known/openid-configuration/api/auth`,
+      },
+    ];
   },
 };
 

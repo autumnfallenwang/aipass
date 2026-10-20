@@ -30,6 +30,7 @@ export type RefusalCode =
   | "pass_invalid"
   | "agent_unknown"
   | "agent_stopped"
+  | "client_not_approved"
   | "role_missing"
   | "role_denies"
   | "person_unknown"
@@ -71,6 +72,11 @@ export type PassCheck = { ok: true } | { ok: false; error: string };
 export type RequestContext = {
   pass: PassCheck;
   agent: { id: string; name: string; status: AgentStatus } | null;
+  /**
+   * The AI app (OAuth client) that holds the pass, when the pass came from
+   * OAuth. Dev passes and token-exchange passes have none.
+   */
+  client?: { id: string; approved: boolean } | null;
   role: { name: string; permissions: readonly Permission[] } | null;
   person: { id: string; displayName: string } | null;
   grant: { status: GrantStatus; permissions: readonly Permission[] } | null;
@@ -87,6 +93,9 @@ export function decideRequest(ctx: RequestContext): Verdict {
 
   if (!ctx.agent) return refuse(2, "agent_unknown", "unknown agent");
   if (ctx.agent.status !== "active") return refuse(2, "agent_stopped", "agent stopped by admin");
+  if (ctx.client && !ctx.client.approved) {
+    return refuse(2, "client_not_approved", `this app isn't approved to act as ${ctx.agent.name}`);
+  }
 
   if (!ctx.role) return refuse(3, "role_missing", `${ctx.agent.name} has no role`);
   if (!ctx.role.permissions.includes(perm)) {

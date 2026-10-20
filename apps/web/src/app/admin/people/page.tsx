@@ -1,7 +1,7 @@
 "use client";
 
 import { ACTION_TITLES, GROUP_TITLES, type Group, type Permission } from "@aipass/shared";
-import { Plus } from "lucide-react";
+import { KeyRound, Plus } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -82,6 +82,65 @@ function AddPerson({ onDone }: { onDone: () => void }) {
           </div>
           <DialogFooter>
             <Button type="submit">Add</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function GiveLogin({ person, onDone }: { person: Person; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ email: "", password: "" });
+  async function submit(e: SubmitEvent) {
+    e.preventDefault();
+    try {
+      await api(`/admin/persons/${person.id}/login`, { method: "POST", json: form });
+      toast.success(`${person.displayName} can now sign in, consent, and see "My AIs"`);
+      setOpen(false);
+      onDone();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <KeyRound /> Give a login
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form onSubmit={submit} className="grid gap-4">
+          <DialogHeader>
+            <DialogTitle>A login for {person.displayName}</DialogTitle>
+            <DialogDescription>
+              With a login they decide what each AI may do for them, and can revoke it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="login-email">Email</Label>
+            <Input
+              id="login-email"
+              type="email"
+              required
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="login-password">Temporary password</Label>
+            <Input
+              id="login-password"
+              type="password"
+              minLength={10}
+              required
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit">Create login</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -199,8 +258,17 @@ export default function PeoplePage() {
           return (
             <Card key={p.id} data-person={p.id}>
               <CardHeader>
-                <CardTitle>{p.displayName}</CardTitle>
-                <CardDescription className="font-mono">{p.fhirRef}</CardDescription>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle>{p.displayName}</CardTitle>
+                    <CardDescription className="font-mono">{p.fhirRef}</CardDescription>
+                  </div>
+                  {p.userId ? (
+                    <Badge variant="secondary">Has a login</Badge>
+                  ) : (
+                    <GiveLogin person={p} onDone={persons.reload} />
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="grid gap-3">
                 {p.grants.map((g) => (

@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
+  agentClients,
   agents,
+  CLAUDE_CODE_CLIENT_ID,
   type Db,
   grants,
   newId,
+  oauthClient,
   persons,
   receipts,
   roles,
@@ -20,13 +23,14 @@ import {
   RoleRule,
   rulesToPermissions,
 } from "@aipass/shared";
-import { and, count, desc, eq, lt, max, type SQL, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt, max, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { SignJWT } from "jose";
 import * as z from "zod";
 import type { Auth } from "./auth.ts";
 import { config, passIssuer } from "./config.ts";
 import { activeKey, PASS_ALG } from "./keys.ts";
+import { allowClient, disallowClient, syncAgentResource } from "./oauth.ts";
 
 type AdminEnv = { Variables: { adminId: string } };
 
@@ -61,6 +65,15 @@ const AgentBody = z.strictObject({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500).optional().nullable(),
   roleId: z.string().min(1),
+  /** Let Claude Code connect as this agent straight away. */
+  allowClaudeCode: z.boolean().optional(),
+});
+
+const ClientBody = z.strictObject({ clientId: z.string().trim().min(1).max(500) });
+
+const LoginBody = z.strictObject({
+  email: z.email(),
+  password: z.string().min(10).max(200),
 });
 
 const PersonBody = z.strictObject({
@@ -119,12 +132,13 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
       const [hit] = await db.select({ id: agents.id }).from(agents).where(eq(agents.id, x));
       return Boolean(hit);
     });
+    const { allowClaudeCode, ...fields } = body.data;
     const [agent] = await db
       .insert(agents)
       .values({
         id,
-        name: body.data.name,
-        description: body.data.description ?? null,
+        name: fields.name,
+        description: fields.description ?? null,
         roleId: role.id,
         status: "active",
         fhirDeviceId: agentDeviceId(id),
@@ -134,12 +148,7 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
     try {
       // The AI exists in the FHIR record as a Device, so audit events can name it.
       await fhir.update(
-        buildDevice({
-          id,
-          name: body.data.name,
-          description: body.data.description,
-          status: "active",
-        }),
+        buildDevice({ id, name: fields.name, description: fields.description, status: "active" }),
       );
     } catch (err) {
       await db.delete(agents).where(eq(agents.id, id));
@@ -148,11 +157,16 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
         502,
       );
     }
+    // The agent's gateway URL becomes an OAuth resource AI apps can ask tokens for.
+    await syncAgentResource(db, { id, name: fields.name });
+    if (allowClaudeCode) await allowClient(db, id, CLAUDE_CODE_CLIENT_ID);
     return c.json({ ...agent, mcpUrl: agentUrl(config.gatewayUrl, id) }, 201);
   });
 
   app.patch("/agents/:id", async (c) => {
-    const body = AgentBody.partial().safeParse(await c.req.json().catch(() => null));
+    const body = AgentBody.omit({ allowClaudeCode: true })
+      .partial()
+      .safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
     if (body.data.roleId) {
       const [role] = await db.select().from(roles).where(eq(roles.id, body.data.roleId));
@@ -164,7 +178,70 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
       .where(eq(agents.id, c.req.param("id")))
       .returning();
     if (!agent) return c.json({ error: "no such agent" }, 404);
+    if (body.data.name) await syncAgentResource(db, agent);
     return c.json(agent);
+  });
+
+  // ---------- which AI apps may connect as an agent ----------
+
+  app.get("/agents/:id/clients", async (c) => {
+    const rows = await db
+      .select({ clientId: agentClients.clientId, createdAt: agentClients.createdAt })
+      .from(agentClients)
+      .where(eq(agentClients.agentId, c.req.param("id")));
+    const known = rows.length
+      ? await db
+          .select({ clientId: oauthClient.clientId, name: oauthClient.name })
+          .from(oauthClient)
+          .where(
+            inArray(
+              oauthClient.clientId,
+              rows.map((r) => r.clientId),
+            ),
+          )
+      : [];
+    return c.json(
+      rows.map((r) => {
+        const k = known.find((x) => x.clientId === r.clientId);
+        return { ...r, name: k?.name ?? null, seen: Boolean(k) };
+      }),
+    );
+  });
+
+  app.post("/agents/:id/clients", async (c) => {
+    const body = ClientBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "expected {clientId}" }, 400);
+    const [agent] = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, c.req.param("id")));
+    if (!agent) return c.json({ error: "no such agent" }, 404);
+    await syncAgentResource(db, agent);
+    await allowClient(db, agent.id, body.data.clientId);
+    return c.json({ agentId: agent.id, clientId: body.data.clientId }, 201);
+  });
+
+  app.delete("/agents/:id/clients", async (c) => {
+    const clientId = c.req.query("clientId");
+    if (!clientId) return c.json({ error: "expected ?clientId=" }, 400);
+    await disallowClient(db, c.req.param("id"), clientId);
+    return c.body(null, 204);
+  });
+
+  // AI apps that registered themselves (DCR) or were discovered from a metadata document (CIMD).
+  app.get("/oauth-clients", async (c) => {
+    const rows = await db
+      .select({
+        clientId: oauthClient.clientId,
+        name: oauthClient.name,
+        clientDiscoveryId: oauthClient.clientDiscoveryId,
+        createdAt: oauthClient.createdAt,
+      })
+      .from(oauthClient)
+      .orderBy(desc(oauthClient.createdAt));
+    return c.json(
+      rows.map((r) => ({ ...r, kind: r.clientDiscoveryId ? "metadata document" : "registered" })),
+    );
   });
 
   for (const [verb, status] of [
@@ -283,6 +360,27 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
       .values({ id, ...body.data })
       .returning();
     return c.json(person, 201);
+  });
+
+  // Gives a test person a login, so they can consent and see "My AIs".
+  app.post("/persons/:id/login", async (c) => {
+    const body = LoginBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "expected {email, password (10+ characters)}" }, 400);
+    const [person] = await db
+      .select()
+      .from(persons)
+      .where(eq(persons.id, c.req.param("id")));
+    if (!person) return c.json({ error: "no such person" }, 404);
+    if (person.userId) return c.json({ error: "this person already has a login" }, 409);
+    try {
+      const { user } = await auth.api.signUpEmail({
+        body: { name: person.displayName, email: body.data.email, password: body.data.password },
+      });
+      await db.update(persons).set({ userId: user.id }).where(eq(persons.id, person.id));
+      return c.json({ personId: person.id, email: body.data.email }, 201);
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
   });
 
   app.put("/persons/:id/grants/:agentId", async (c) => {

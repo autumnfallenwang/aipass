@@ -278,17 +278,18 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - gateway PRM advertises api as its authorization server.
 
 **Build:**
-- [ ] OAuth provider config, consent page, "My AIs" page
-- [ ] Persons get real logins (Better Auth); the `persons` table is linked to the user
-- [ ] Agent registration in admin issues or links an OAuth client
-- [ ] Remove `headersHelper` from the default docs (keep it as the "headless agent" option)
+- [x] OAuth provider config: Better Auth `oauthProvider` + `jwt` + `cimd`, DCR on, `enforcePerClientResources`, one resource per agent with a 300 s access token. A claims extension adds `act.sub` (from the resource) and `patient` (from the person linked to the login). Discovery is at `/.well-known/oauth-authorization-server/api/auth` on the public origin. Consent page (`/consent`) and "My AIs" page (`/my-ais`)
+- [x] Persons get real logins: the admin's **Give a login**, or the demo seed (`maria@example.org`). The first account becomes admin only while no admin exists, so seeding person logins can't take the admin slot
+- [x] Agent registration links OAuth clients. aipass keeps its own list of *which apps may act as which agent* (`agent_clients`, D11) and writes Better Auth's client↔resource link when the client appears (a CIMD client only appears on its first visit). Registering an agent can allow Claude Code in one click; **Agents → Apps** manages the rest. The gateway also checks the list live (rule 2: *this app isn't approved to act as …*)
+- [x] `headersHelper` moved out of the default docs: [demo-s3.md](demo-s3.md) is the main path, and [demo-s1.md](demo-s1.md) is the "agent without a browser" option
 
-**Validate:**
-- [ ] Fresh Claude Code + gateway URL → browser login as Maria → consent → tools work, with zero manual token handling
-- [ ] Maria unticks vitals → `search_vitals` refused "Maria hasn't agreed to vitals"; labs still work
-- [ ] Revoke on "My AIs" → next call refused **and** the refresh token is rejected at the token endpoint
-- [ ] A pass for Maria can't read John (compartment), and a pass minted for agent A is refused when agent B presents it (record whether DPoP binding is needed; prediction: needed)
-- [ ] Tag `v0.2.0`
+**Validate** (`apps/web/e2e/oauth.spec.ts`, 8 tests, plus real Claude Code):
+- [x] Fresh Claude Code + gateway URL → browser login as Maria → consent → tools work, with zero manual token handling. Real Claude Code 2.1.301: `claude mcp add` + `claude mcp login` used CIMD, PKCE and `resource`; Playwright played Maria's browser (`e2e/manual/claude-oauth-login.ts`)
+- [x] Maria unticks vitals → `search_vitals` refused *"Maria hasn't agreed to vital signs"*; labs still work. Real Claude: A1c 6.9%, blood pressure refused with that reason
+- [x] Revoke on "My AIs" → next call refused (*Maria hasn't agreed to lab results*) **and** the refresh token is rejected at the token endpoint (`invalid_grant`). With real Claude Code, all 7 of its refresh tokens for the coach were revoked, and its next connection had no valid pass
+- [x] A pass for Maria can't read John (*not Maria's record*), and a token minted for agent A is refused at agent B's door (`401 wrong audience`). **DPoP: prediction ("needed") wrong for this case.** The per-agent audience (D9) already stops cross-agent replay. Claude Code registers with `dpop_bound_access_tokens: false`, so requiring DPoP would lock it out. DPoP remains useful against a stolen token used by a *different* client; Better Auth can require it per resource, which becomes an opt-in per agent in S7
+- [x] Also: an app the admin hasn't approved is refused at the authorization server (`invalid_target`), and withdrawing an approved app refuses its next call at the gateway
+- [x] Tag `v0.2.0`
 
 ---
 
@@ -436,8 +437,8 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 | S0 Foundation + spikes | ✅ done | Oct 19 | all 4 spikes answered; SP2 changed the MCP SDK (D8), SP1 led to one URL per agent (D9) |
 | S1 The guard (read-only) | ✅ done | Oct 19 | all validation rows automated; real Claude Code demo run |
 | S2 Admin UI v1 → v0.1 | ✅ done | Oct 19 | v0.1.0 tagged; release check by an independent agent (a person's run still wanted) |
-| S3 Real login + person's yes → v0.2 | 🟡 next | Nov 13–24 | |
-| S4 Health check | ⬜ | Nov 24 – Dec 3 | external scorecards |
+| S3 Real login + person's yes → v0.2 | ✅ done | Oct 19 | real Claude Code over OAuth; v0.2.0 |
+| S4 Health check | 🟡 next | Nov 24 – Dec 3 | external scorecards |
 | S5 Approved changes → v0.3 | ⬜ | Dec 3–17 | |
 | S6 Any environment → v0.4 | ⬜ | Dec 17 – Jan 14 | |
 | S7 Hardening → v1.0 | ⬜ | Jan 14 – Feb | |
@@ -450,6 +451,9 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-19 | **S3 ✅ v0.2.0.** Real Claude Code connected with only the gateway URL (CIMD + PKCE + `resource`), Maria consented without vitals, and the gateway refused vitals with her reason. Revoking on "My AIs" ended the session. 13 e2e tests green |
+| 2026-10-19 | **Prediction miss (S3):** DPoP isn't needed against cross-agent replay; the per-agent audience handles it. Claude Code doesn't use DPoP |
+| 2026-10-19 | **Surprise:** a CIMD client exists in Better Auth only after its first visit, so the admin's "allow this app" can't be a foreign key up front. aipass keeps its own list and links on Better Auth's `onClientCreated` (D11). Also: Turbopack dev went into an "HMR hash mismatch" reload loop after many file changes; a clean `.next` fixed it |
 | 2026-10-19 | **S2 ✅ v0.1.0.** Release check (fresh clone, README only, independent agent): PASS. Its fixes: one Claude config per agent (`deploy/claude/coach.json`, `scheduler.json`), permission prompts and `-p` flags documented, rule numbers explained in the doc and on hover in Activity, the chain result stays on screen, the preview starts on the person most agents act for |
 | 2026-10-19 | **S2 built.** Stop → refusal measured at 38–89 ms. E2E runs on its own ports (4000–4002), database (`aipass_e2e`) and Next build folder, next to `pnpm dev`. One public origin (D10) |
 | 2026-10-19 | **S1 ✅** 63 unit + 32 integration tests green; real Claude Code demo matches the plan |

@@ -8,21 +8,37 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
+import { api, type Me } from "@/lib/api";
+import { authClient, followRedirect, inOAuthFlow } from "@/lib/auth-client";
 
 function LoginForm() {
   const router = useRouter();
-  const next = useSearchParams().get("next") ?? "/admin";
+  const next = useSearchParams().get("next");
   const [needsAdmin, setNeedsAdmin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
 
   useEffect(() => {
+    // In the middle of an AI app's login, only ever sign in.
+    if (inOAuthFlow()) {
+      setNeedsAdmin(false);
+      return;
+    }
     api<{ needsAdmin: boolean }>("/setup")
       .then((r) => setNeedsAdmin(r.needsAdmin))
       .catch(() => setNeedsAdmin(false));
   }, []);
+
+  /** After sign-in: continue an AI app's login, or go to the admin or the person's page. */
+  async function land(data: unknown) {
+    if (followRedirect(data)) return;
+    if (next) {
+      router.replace(next);
+      return;
+    }
+    const me = await api<Me>("/me");
+    router.replace(me.role === "admin" ? "/admin" : "/my-ais");
+  }
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
@@ -39,7 +55,7 @@ function LoginForm() {
       toast.error(res.error.message ?? "Sign-in failed");
       return;
     }
-    router.replace(next);
+    await land(res.data);
   }
 
   async function passkey() {
@@ -48,7 +64,7 @@ function LoginForm() {
       toast.error(res.error.message ?? "Passkey sign-in failed");
       return;
     }
-    router.replace(next);
+    await land(res?.data);
   }
 
   if (needsAdmin === null) return null;
@@ -62,7 +78,9 @@ function LoginForm() {
         <CardDescription>
           {needsAdmin
             ? "This is a fresh install. The first account runs it."
-            : "Use your email and password, or a passkey."}
+            : inOAuthFlow()
+              ? "An AI app is asking to act for you. Sign in first; you'll see exactly what it wants next."
+              : "Use your email and password, or a passkey."}
         </CardDescription>
       </CardHeader>
       <CardContent>

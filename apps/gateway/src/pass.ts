@@ -8,7 +8,10 @@ import { createRemoteJWKSet, decodeJwt, errors, type JWTVerifyGetKey, jwtVerify 
 import * as z from "zod";
 import type { TrustedIssuer } from "./config.ts";
 
-export type PassResult = { ok: true; claims: PassClaims } | { ok: false; error: string };
+/** `clientId` is the OAuth client that holds the pass (OAuth passes only). */
+export type PassResult =
+  | { ok: true; claims: PassClaims; clientId?: string }
+  | { ok: false; error: string };
 
 /** What the api signs when an admin asks to preview a chart. */
 export const PreviewClaims = z.object({
@@ -104,7 +107,8 @@ export class PassVerifier {
         return { ok: false, error: "lifetime too long" };
       }
       if (claims.act.sub !== agentId) return { ok: false, error: "issued to a different agent" };
-      return { ok: true, claims };
+      const clientId = typeof payload.client_id === "string" ? payload.client_id : undefined;
+      return { ok: true, claims, clientId };
     } catch (err) {
       if (err instanceof errors.JWTExpired) return { ok: false, error: "expired" };
       if (err instanceof errors.JWTClaimValidationFailed && err.claim === "aud") {

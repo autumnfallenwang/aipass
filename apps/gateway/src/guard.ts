@@ -20,8 +20,11 @@ import { AuditWriteFailed, type Recorder } from "./recorder.ts";
 
 export type Mode = "live" | "preview";
 
-/** Who is calling: the agent from the URL, and the pass they presented (already verified). */
-export type Caller = { agentId: string; claims: PassClaims; mode: Mode };
+/**
+ * Who is calling: the agent from the URL, the pass they presented (already
+ * verified), and the OAuth client that holds it when the pass came from OAuth.
+ */
+export type Caller = { agentId: string; claims: PassClaims; mode: Mode; clientId?: string };
 
 export type ReadRequest = {
   tool: string;
@@ -146,6 +149,9 @@ export class Guard {
       pass: { ok: true },
       agent: ctx.agent
         ? { id: ctx.agent.id, name: ctx.agent.name, status: ctx.agent.status }
+        : null,
+      client: caller.clientId
+        ? { id: caller.clientId, approved: ctx.allowedClients.includes(caller.clientId) }
         : null,
       role: ctx.role ? { name: ctx.role.name, permissions: ctx.role.permissions } : null,
       person: ctx.person ? { id: ctx.person.id, displayName: ctx.person.displayName } : null,

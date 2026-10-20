@@ -1,12 +1,14 @@
 "use client";
 
-import { Copy, Eye, Play, Plus, Square } from "lucide-react";
+import { AppWindow, Copy, Eye, Play, Plus, Square } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { toast } from "sonner";
+import { AgentAppsDialog } from "@/components/agent-apps";
 import { PageHeader, timeAgo } from "@/components/page-header";
 import { PreviewDialog } from "@/components/preview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -38,7 +40,12 @@ import { type Agent, api, type Role, useApi } from "@/lib/api";
 
 function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", roleId: "" });
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    roleId: "",
+    allowClaudeCode: true,
+  });
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
@@ -46,7 +53,7 @@ function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void })
       const a = await api<Agent>("/admin/agents", { method: "POST", json: form });
       toast.success(`${a.name} registered`, { description: a.mcpUrl });
       setOpen(false);
-      setForm({ name: "", description: "", roleId: "" });
+      setForm({ name: "", description: "", roleId: "", allowClaudeCode: true });
       onDone();
     } catch (err) {
       toast.error((err as Error).message);
@@ -101,6 +108,13 @@ function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void })
               </SelectContent>
             </Select>
           </div>
+          <Label className="flex items-center gap-2 font-normal">
+            <Checkbox
+              checked={form.allowClaudeCode}
+              onCheckedChange={(on) => setForm({ ...form, allowClaudeCode: on === true })}
+            />
+            Let Claude Code connect as this agent
+          </Label>
           <DialogFooter>
             <Button type="submit" disabled={!form.name || !form.roleId}>
               Register
@@ -116,6 +130,7 @@ export default function AgentsPage() {
   const agents = useApi<Agent[]>("/admin/agents", { pollMs: 5000 });
   const roles = useApi<Role[]>("/admin/roles");
   const [preview, setPreview] = useState<Agent | null>(null);
+  const [apps, setApps] = useState<Agent | null>(null);
 
   async function setStatus(a: Agent, verb: "stop" | "resume") {
     try {
@@ -186,6 +201,9 @@ export default function AgentsPage() {
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setApps(a)}>
+                    <AppWindow /> Apps
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => setPreview(a)}>
                     <Eye /> Preview
                   </Button>
@@ -204,6 +222,7 @@ export default function AgentsPage() {
           ))}
         </TableBody>
       </Table>
+      {apps && <AgentAppsDialog agent={apps} onClose={() => setApps(null)} />}
       {preview && (
         <PreviewDialog
           title={`Preview: ${preview.name}`}

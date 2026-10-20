@@ -15,6 +15,13 @@
       "when": 1792461599850,
       "tag": "0001_wild_thunderbolt_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792462947712,
+      "tag": "0002_early_steve_rogers",
+      "breakpoints": true
     }
   ]
 }

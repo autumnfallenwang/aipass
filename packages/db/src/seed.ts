@@ -3,7 +3,7 @@ import { agentDeviceId, rulesToPermissions } from "@aipass/shared";
 import { inArray } from "drizzle-orm";
 import { newId } from "./ids.ts";
 import type { Db } from "./index.ts";
-import { agents, grants, persons, roles } from "./schema.ts";
+import { agentClients, agents, grants, persons, roles } from "./schema.ts";
 
 const rule = (
   group: RoleRule["group"],
@@ -16,6 +16,9 @@ const rule = (
   propose,
   write,
 });
+
+/** Claude Code's Client ID Metadata Document URL: the same for every install. */
+export const CLAUDE_CODE_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata";
 
 /** The Maria demo, used by every stage. */
 export const DEMO = {
@@ -121,6 +124,11 @@ export async function seedDemo(db: Db, opts: { reset?: boolean } = {}): Promise<
     )
     .onConflictDoNothing();
   await db.insert(persons).values(DEMO.persons).onConflictDoNothing();
+  // The demo lets Claude Code connect as either agent.
+  await db
+    .insert(agentClients)
+    .values(DEMO.agents.map((a) => ({ agentId: a.id, clientId: CLAUDE_CODE_CLIENT_ID })))
+    .onConflictDoNothing();
   await db
     .insert(grants)
     .values(demoGrants().map((g) => ({ ...g, id: newId("grt"), status: "active" as const })))

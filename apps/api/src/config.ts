@@ -18,6 +18,8 @@ export const config = {
   /** The origin people's browsers use. The web app proxies `/api/*` here, so auth lives on this origin. */
   publicUrl: url("PUBLIC_URL", process.env.WEB_URL ?? "http://localhost:3000"),
   authSecret: authSecret(),
+  /** The organisation people see on the consent page ("approved by …"). */
+  orgName: process.env.ORG_NAME ?? "Sunrise Clinic",
   /** Dev passes are minted by a CLI and a localhost-only endpoint. Off unless asked for. */
   devPasses: process.env.AIPASS_DEV_PASSES === "1",
 };

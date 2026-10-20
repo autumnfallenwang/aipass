@@ -1,14 +1,27 @@
-import { authSchema, type Db, users } from "@aipass/db";
+import { authSchema, type Db, persons, users } from "@aipass/db";
+import { cimd } from "@better-auth/cimd";
+import { fetchClientMetadataResource } from "@better-auth/cimd/node";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { count } from "drizzle-orm";
+import { jwt } from "better-auth/plugins";
+import { count, eq } from "drizzle-orm";
 import { config } from "./config.ts";
+import { agentIdOfResource, linkPendingClient } from "./oauth.ts";
+import { patientIdOf } from "./pass.ts";
+
+export async function adminExists(db: Db): Promise<boolean> {
+  const [row] = await db.select({ n: count() }).from(users).where(eq(users.role, "admin"));
+  return (row?.n ?? 0) > 0;
+}
 
 /**
- * Better Auth: admin and person logins (email + password, passkeys).
- * It is served at `/api/auth` on the *public* origin: the web app proxies
- * `/api/*` to this api, so cookies and passkeys belong to one origin.
+ * Better Auth on the public origin (D10):
+ * - admin and person logins (email + password, passkeys);
+ * - the OAuth authorization server AI clients use (S3). Its access token *is*
+ *   the pass: `sub` = the person's login, `act.sub` = the agent, `aud` = that
+ *   agent's gateway URL, 5 minutes.
  */
 export function createAuth(db: Db) {
   const origin = new URL(config.publicUrl);
@@ -29,15 +42,47 @@ export function createAuth(db: Db) {
     databaseHooks: {
       user: {
         create: {
-          // The first account on a fresh install becomes the admin.
-          before: async (user) => {
-            const [row] = await db.select({ n: count() }).from(users);
-            return { data: { ...user, role: (row?.n ?? 0) === 0 ? "admin" : "person" } };
-          },
+          // The first account on an install with no admin becomes the admin.
+          before: async (user) => ({
+            data: { ...user, role: (await adminExists(db)) ? "person" : "admin" },
+          }),
         },
       },
     },
-    plugins: [passkey({ rpID: origin.hostname, rpName: "aipass", origin: config.publicUrl })],
+    plugins: [
+      passkey({ rpID: origin.hostname, rpName: "aipass", origin: config.publicUrl }),
+      jwt(),
+      oauthProvider({
+        loginPage: "/login",
+        consentPage: "/consent",
+        scopes: ["openid", "profile", "email", "offline_access"],
+        // MCP clients without a metadata document register themselves. A newly
+        // registered app can't act as any agent until the admin allows it.
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        clientRegistrationDefaultApplicationType: "infer",
+        enforcePerClientResources: true,
+        extensions: [
+          {
+            claims: {
+              accessToken: async ({ user, resources }) => {
+                const agentIds = (resources ?? []).map(agentIdOfResource).filter(Boolean);
+                if (agentIds.length !== 1 || !agentIds[0]) return {};
+                const [person] = user
+                  ? await db.select().from(persons).where(eq(persons.userId, user.id))
+                  : [];
+                const patient = person ? patientIdOf(person.fhirRef) : undefined;
+                return { act: { sub: agentIds[0] }, ...(patient ? { patient } : {}) };
+              },
+            },
+          },
+        ],
+      }),
+      cimd({
+        fetchClientMetadataResource,
+        onClientCreated: async ({ client }) => linkPendingClient(db, client.clientId),
+      }),
+    ],
     advanced: { cookiePrefix: "aipass" },
   });
 }

@@ -3,24 +3,11 @@
  * plays the AI agent against the real gateway. See docs/PLAN.md § S2.
  */
 import { writeFileSync } from "node:fs";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { asAgent } from "./agent.ts";
-
-const ADMIN = {
-  name: "Ada Admin",
-  email: "admin@sunrise-clinic.example",
-  password: "correct horse battery",
-};
+import { ADMIN, signIn } from "./helpers.ts";
 
 test.describe.configure({ mode: "serial" });
-
-async function signIn(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(ADMIN.email);
-  await page.getByLabel("Password").fill(ADMIN.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\/agents/);
-}
 
 test("the first account on a fresh install becomes the admin", async ({ page }) => {
   await page.goto("/admin");

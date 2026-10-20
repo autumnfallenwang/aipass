@@ -32,9 +32,16 @@ export function createGateway(deps: GatewayDeps) {
   const mcp = createMcpHandler(({ authInfo }) => {
     const claims = authInfo?.extra?.claims as PassClaims | undefined;
     const agentId = authInfo?.extra?.agentId as string | undefined;
-    if (!claims || !agentId)
+    if (!claims || !agentId) {
       throw new Error("MCP request reached the handler without a verified pass");
-    return buildServer(guard, { agentId, claims, mode: "live" });
+    }
+    const clientId = authInfo?.extra?.clientId;
+    return buildServer(guard, {
+      agentId,
+      claims,
+      mode: "live",
+      clientId: typeof clientId === "string" ? clientId : undefined,
+    });
   });
 
   const prmUrl = (agentId: string) =>
@@ -155,7 +162,7 @@ export function createGateway(deps: GatewayDeps) {
         expiresAt: result.claims.exp,
         resource: new URL(agentUrl(config.gatewayUrl, agentId)),
         resourceMetadataUrl: prmUrl(agentId),
-        extra: { claims: result.claims, agentId },
+        extra: { claims: result.claims, agentId, clientId: result.clientId },
       },
     });
   });

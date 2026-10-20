@@ -29,13 +29,16 @@ export type GatewayConfig = {
 
 export function loadConfig(env = process.env): GatewayConfig {
   const apiUrl = url(env, "API_URL", "http://localhost:3001");
+  // OAuth passes are issued on the public origin (D10) but their keys are
+  // fetched from the api directly.
+  const publicUrl = url(env, "PUBLIC_URL", env.WEB_URL ?? "http://localhost:3000");
   const issuers: TrustedIssuer[] = env.TRUSTED_ISSUERS
     ? (JSON.parse(env.TRUSTED_ISSUERS) as TrustedIssuer[])
     : [
         // dev passes (S1) and token exchange (S6)
         { issuer: apiUrl, jwksUri: `${apiUrl}/.well-known/jwks.json` },
         // OAuth access tokens (S3)
-        { issuer: `${apiUrl}/api/auth`, jwksUri: `${apiUrl}/api/auth/jwks` },
+        { issuer: `${publicUrl}/api/auth`, jwksUri: `${apiUrl}/api/auth/jwks` },
       ];
   return {
     port: Number(env.GATEWAY_PORT ?? 3002),
@@ -45,7 +48,7 @@ export function loadConfig(env = process.env): GatewayConfig {
     fhirHeaders: env.FHIR_AUTHORIZATION ? { authorization: env.FHIR_AUTHORIZATION } : {},
     databaseUrl: env.DATABASE_URL ?? "postgres://aipass:aipass@127.0.0.1:5433/aipass",
     trustedIssuers: issuers,
-    authorizationServers: [`${apiUrl}/api/auth`],
+    authorizationServers: [`${publicUrl}/api/auth`],
     pageSecret: env.PAGE_SECRET ? Buffer.from(env.PAGE_SECRET, "utf8") : randomBytes(32),
     maxPageSize: 50,
   };
