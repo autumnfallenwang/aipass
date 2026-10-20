@@ -38,7 +38,14 @@ async function ensureDatabase(url: string): Promise<void> {
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
-export async function createHarness(opts: { fhir?: FhirClient } = {}) {
+export async function createHarness(
+  opts: {
+    fhir?: FhirClient;
+    upstreamFetch?: typeof fetch;
+    /** Sees every response the gateway sends an agent. */
+    onResponse?: (res: Response) => void;
+  } = {},
+) {
   await ensureDatabase(TEST_DB);
   await runMigrations(TEST_DB);
   const { db, close } = createDb(TEST_DB);
@@ -60,7 +67,7 @@ export async function createHarness(opts: { fhir?: FhirClient } = {}) {
     new Map([[ISSUER, createLocalJWKSet({ keys: [jwk] })]]),
   );
   const fhir = opts.fhir ?? new FhirClient({ baseUrl: FHIR });
-  const gw = createGateway({ db, config, verifier, fhir });
+  const gw = createGateway({ db, config, verifier, fhir, upstreamFetch: opts.upstreamFetch });
 
   async function reset(): Promise<void> {
     await seedDemo(db, { reset: true });
@@ -89,8 +96,11 @@ export async function createHarness(opts: { fhir?: FhirClient } = {}) {
       .sign(over.key ?? privateKey);
   }
 
-  const appFetch = async (input: string | URL | Request, init?: RequestInit) =>
-    gw.app.fetch(new Request(input, init));
+  const appFetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const res = await gw.app.fetch(new Request(input, init));
+    opts.onResponse?.(res);
+    return res;
+  };
 
   async function connect(agent: string, token: string) {
     const client = new Client({ name: "aipass-test", version: "0.0.0" });

@@ -46,9 +46,12 @@ export type AuditInput = {
   sentence: string;
   passJti: string | null;
   receiptId: string;
-  /** Records returned or written. */
-  targets?: string[];
+  /** Records returned or written: `Type/id` here, or on another FHIR server (S6). */
+  targets?: AuditTarget[];
 };
+
+/** A record on aipass's own server (`Type/id`), or on another one, named by that server's id. */
+export type AuditTarget = string | { server: string; ref: string };
 
 const ACTION: Record<AuditInput["interaction"], string> = {
   // a proposal is recorded as an operation: nothing is written yet
@@ -115,7 +118,15 @@ export function buildAuditEvent(a: AuditInput): Resource {
       description: a.query,
     });
   }
-  for (const t of a.targets ?? []) entity.push({ what: { reference: t } });
+  // A record on another server isn't here to point at, so it's identified by server and id.
+  for (const t of a.targets ?? []) {
+    entity.push({
+      what:
+        typeof t === "string"
+          ? { reference: t }
+          : { identifier: { system: `${AIPASS_SYSTEM}/fhir-server/${t.server}`, value: t.ref } },
+    });
+  }
 
   return {
     resourceType: "AuditEvent",
@@ -150,10 +161,15 @@ export type ProvenanceInput = {
   target: string;
   agent: { id: string; name: string };
   onBehalfOf: { ref: string; name: string };
-  /** Who approved the change, when it's someone other than `onBehalfOf`. */
-  approver?: { ref: string; name: string };
+  /** Who approved the change, when it's someone other than `onBehalfOf`. No ref: named only. */
+  approver?: { ref?: string; name: string };
   approvalId: string;
   payloadHash: string;
+  /**
+   * Written to a FHIR server other than aipass's own (S6). The agent's
+   * Device isn't there, so it's identified rather than referenced.
+   */
+  elsewhere?: boolean;
 };
 
 /** Provenance for a write: the AI did it, for the person, with their approval. */
@@ -178,7 +194,12 @@ export function buildProvenance(p: ProvenanceInput): Resource {
             },
           ],
         },
-        who: { reference: `Device/${agentDeviceId(p.agent.id)}`, display: p.agent.name },
+        who: p.elsewhere
+          ? {
+              identifier: { system: `${AIPASS_SYSTEM}/agent`, value: p.agent.id },
+              display: p.agent.name,
+            }
+          : { reference: `Device/${agentDeviceId(p.agent.id)}`, display: p.agent.name },
         onBehalfOf: { reference: p.onBehalfOf.ref, display: p.onBehalfOf.name },
       },
       {
@@ -190,7 +211,9 @@ export function buildProvenance(p: ProvenanceInput): Resource {
             },
           ],
         },
-        who: { reference: approver.ref, display: approver.name },
+        who: approver.ref
+          ? { reference: approver.ref, display: approver.name }
+          : { display: approver.name },
       },
     ],
     entity: [

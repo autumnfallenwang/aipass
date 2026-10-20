@@ -10,12 +10,15 @@ import { type Caller, Guard, type RoleOverride } from "./guard.ts";
 import { PassVerifier } from "./pass.ts";
 import { Recorder } from "./recorder.ts";
 import { buildServer } from "./tools.ts";
+import { Upstreams } from "./upstream.ts";
 
 export type GatewayDeps = {
   db: Db;
   config: GatewayConfig;
   fhir?: FhirClient;
   verifier?: PassVerifier;
+  /** How the gateway reaches other FHIR servers and their token endpoints (tests watch it). */
+  upstreamFetch?: typeof fetch;
 };
 
 const AGENT_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -33,8 +36,14 @@ export function createGateway(deps: GatewayDeps) {
   const verifier =
     deps.verifier ?? new PassVerifier(config.gatewayUrl, config.trustedIssuers, undefined, broken);
   const recorder = new Recorder(db, fhir, broken);
-  const guard = new Guard({ db, fhir, config, recorder, broken });
-  const changes = new Changes({ db, fhir, config, recorder, guard, broken });
+  const upstreams = new Upstreams({
+    db,
+    home: fhir,
+    key: config.vaultKey,
+    fetch: deps.upstreamFetch,
+  });
+  const guard = new Guard({ db, config, recorder, upstreams, broken });
+  const changes = new Changes({ db, config, recorder, guard, broken });
 
   // One handler serves MCP 2026-07-28 and falls back to stateless 2025-11-25.
   // The factory builds a fresh server per request, bound to the verified pass.

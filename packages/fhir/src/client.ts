@@ -48,7 +48,8 @@ export class FhirClient {
   }
 
   private async request<T>(method: string, url: string, body?: unknown): Promise<T> {
-    if (!this.owns(url)) throw new FhirError(`refusing to call a URL outside ${this.baseUrl}`, 0);
+    // No URLs in the message: an upstream base URL can carry settings that belong in no log.
+    if (!this.owns(url)) throw new FhirError("refusing to call a URL outside the FHIR server", 0);
     const res = await this.doFetch(url, {
       method,
       headers: body ? { ...this.headers, "content-type": "application/fhir+json" } : this.headers,

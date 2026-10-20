@@ -76,6 +76,11 @@ services:
       ACCESS_TOKEN_LIFETIME: 5
     ports:
       - "127.0.0.1:${AIPASS_SMART_PORT:-8090}:80"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
 volumes:
   pgdata:

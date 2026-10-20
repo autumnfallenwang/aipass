@@ -4,7 +4,6 @@ import {
   buildProposedObservation,
   buildProvenance,
   describeChange,
-  type FhirClient,
   MEASURES,
   ProposalError,
   type ProposedChange,
@@ -18,6 +17,7 @@ import type { Defect } from "./broken.ts";
 import type { GatewayConfig } from "./config.ts";
 import type { Caller, Guard, Resolved } from "./guard.ts";
 import { AuditWriteFailed, type Recorder } from "./recorder.ts";
+import { isTarget } from "./upstream.ts";
 
 /** How long a proposal waits for the person's OK. */
 const PROPOSAL_MINUTES = 10;
@@ -52,7 +52,6 @@ export class Changes {
   constructor(
     private readonly deps: {
       db: Db;
-      fhir: FhirClient;
       config: GatewayConfig;
       recorder: Recorder;
       guard: Guard;
@@ -73,9 +72,14 @@ export class Changes {
       const why = v.decision === "refuse" ? v : refuse(4, "person_unknown", "unknown person");
       return this.refused(caller, r, "propose_observation", "propose", group, why);
     }
+    // The record is built for the patient at the server it will be written to.
+    const target = await guard.target(r);
+    if (!isTarget(target)) {
+      return this.refused(caller, r, "propose_observation", "propose", group, target);
+    }
     let resource: ReturnType<typeof buildProposedObservation>;
     try {
-      resource = buildProposedObservation(change, r.patientRef);
+      resource = buildProposedObservation(change, target.patientRef);
     } catch (err) {
       if (!(err instanceof ProposalError)) throw err;
       return this.refused(
@@ -154,7 +158,7 @@ export class Changes {
   }
 
   async commit(caller: Caller, approvalId: string, change: ProposedChange): Promise<CommitOutcome> {
-    const { db, guard, fhir } = this.deps;
+    const { db, guard } = this.deps;
     const r = await guard.resolve(caller);
     const group = MEASURES[change.measure]?.group ?? "labs";
     const v = guard.verdictFor(caller, r, group, "propose");
@@ -162,9 +166,12 @@ export class Changes {
       const why = v.decision === "refuse" ? v : refuse(4, "person_unknown", "unknown person");
       return this.refused(caller, r, "commit_change", "write", group, why);
     }
+    const target = await guard.target(r);
+    if (!isTarget(target)) return this.refused(caller, r, "commit_change", "write", group, target);
+    const { fhir } = target;
     let resource: ReturnType<typeof buildProposedObservation>;
     try {
-      resource = buildProposedObservation(change, r.patientRef);
+      resource = buildProposedObservation(change, target.patientRef);
     } catch (err) {
       if (!(err instanceof ProposalError)) throw err;
       return this.refused(
@@ -232,18 +239,22 @@ export class Changes {
     try {
       const written = await fhir.create(resource);
       ref = `Observation/${written.id}`;
+      const elsewhere = Boolean(target.source);
       await fhir.create(
         buildProvenance({
           recorded: new Date().toISOString(),
           target: ref,
           agent: { id: caller.agentId, name: r.agentName },
-          onBehalfOf: { ref: r.person.ref, name: r.person.name },
+          // On another server the person is the launch's patient; their aipass ref isn't there.
+          onBehalfOf: { ref: elsewhere ? target.patientRef : r.person.ref, name: r.person.name },
+          // Someone else who approved is only known here, so on another server they're named.
           approver:
             approver && approver.id !== r.person.id
-              ? { ref: approver.fhirRef, name: approver.displayName }
+              ? { ref: elsewhere ? undefined : approver.fhirRef, name: approver.displayName }
               : undefined,
           approvalId,
           payloadHash: hash,
+          elsewhere,
         }),
       );
     } catch (err) {
@@ -295,7 +306,7 @@ export class Changes {
           decision: "allow",
           sentence,
           count: 1,
-          targets: [ref],
+          targets: [target.source ? { server: target.source.id, ref } : ref],
           mode: caller.mode,
         },
         { requireAudit: false },

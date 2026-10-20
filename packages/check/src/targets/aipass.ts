@@ -35,6 +35,17 @@ export type AipassTargetOptions = {
   apiFetch?: typeof fetch;
   /** Which synthetic person the probes act for. Must have a `Patient/…` record with the fixtures. */
   person?: string;
+  /**
+   * Read the person's record from this FHIR server instead of aipass's own
+   * (S6). The person must have connected their record there.
+   */
+  fhirServerId?: string;
+  /**
+   * Where a good pass comes from, when not signed by the api's own key: e.g.
+   * token exchange with the person's token from a connected login (S6).
+   * Deliberately bad passes are still made locally.
+   */
+  goodCredential?: (agentId: string) => Promise<string>;
 };
 
 const ALL_READS: Permission[] = [...GROUPS.map((g) => permission(g, "read")), "labs:propose"];
@@ -132,6 +143,7 @@ export function aipassTarget(o: AipassTargetOptions): Target {
           roleId: a.roleId,
           status: "active" as const,
           fhirDeviceId: agentDeviceId(a.id),
+          fhirServerId: o.fhirServerId ?? null,
           description: "Registered by the aipass health check; removed when it finishes.",
         })),
       );
@@ -189,6 +201,8 @@ export function aipassTarget(o: AipassTargetOptions): Target {
       const agent: "all" | "labs" =
         req.groups?.length === 1 && req.groups[0] === "labs" ? "labs" : "all";
       const agentId = CHECK_AGENTS[agent].id;
+      if (!req.variant && o.goodCredential)
+        return { bearer: await o.goodCredential(agentId), agent };
       const now = Math.floor(Date.now() / 1000);
       let { kid, key } = await signingKey();
       if (req.variant === "forged") key = (await generateKeyPair("ES256")).privateKey;

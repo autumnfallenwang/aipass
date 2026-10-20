@@ -5,6 +5,7 @@ import {
   agents,
   CLAUDE_CODE_CLIENT_ID,
   type Db,
+  fhirServers,
   grants,
   newId,
   oauthClient,
@@ -32,6 +33,7 @@ import { adminApprovalRoutes } from "./approvals.ts";
 import type { Auth } from "./auth.ts";
 import { config, passIssuer } from "./config.ts";
 import { adminConnectionRoutes } from "./connections.ts";
+import { adminFhirServerRoutes } from "./fhir-servers.ts";
 import { activeKey, PASS_ALG } from "./keys.ts";
 import { allowClient, disallowClient, syncAgentResource } from "./oauth.ts";
 
@@ -68,6 +70,8 @@ const AgentBody = z.strictObject({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500).optional().nullable(),
   roleId: z.string().min(1),
+  /** Where its records live (S6); null for aipass's own FHIR server. */
+  fhirServerId: z.string().min(1).nullable().optional(),
   /** Let Claude Code connect as this agent straight away. */
   allowClaudeCode: z.boolean().optional(),
 });
@@ -104,6 +108,14 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
 
   // ---------- agents ----------
 
+  async function serverExists(id: string) {
+    const [hit] = await db
+      .select({ id: fhirServers.id })
+      .from(fhirServers)
+      .where(eq(fhirServers.id, id));
+    return Boolean(hit);
+  }
+
   async function listAgents() {
     const rows = await db
       .select({ agent: agents, roleName: roles.name })
@@ -131,6 +143,9 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
     if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
     const [role] = await db.select().from(roles).where(eq(roles.id, body.data.roleId));
     if (!role) return c.json({ error: "no such role" }, 400);
+    if (body.data.fhirServerId && !(await serverExists(body.data.fhirServerId))) {
+      return c.json({ error: "no such FHIR server" }, 400);
+    }
     const id = await uniqueId(slugify(body.data.name), async (x) => {
       const [hit] = await db.select({ id: agents.id }).from(agents).where(eq(agents.id, x));
       return Boolean(hit);
@@ -174,6 +189,9 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
     if (body.data.roleId) {
       const [role] = await db.select().from(roles).where(eq(roles.id, body.data.roleId));
       if (!role) return c.json({ error: "no such role" }, 400);
+    }
+    if (body.data.fhirServerId && !(await serverExists(body.data.fhirServerId))) {
+      return c.json({ error: "no such FHIR server" }, 400);
     }
     const [agent] = await db
       .update(agents)
@@ -484,6 +502,7 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
 
   app.route("/", adminApprovalRoutes({ db }));
   app.route("/", adminConnectionRoutes({ db, auth, fetch: deps.fetch }));
+  app.route("/", adminFhirServerRoutes({ db, fetch: deps.fetch }));
 
   // ---------- health check (S4) ----------
 

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { vaultKey } from "@aipass/db";
 import { type Defect, parseBroken } from "./broken.ts";
 
 const rootEnv = join(import.meta.dirname, "..", "..", "..", ".env");
@@ -28,6 +29,8 @@ export type GatewayConfig = {
   /** Signs paging tokens so an agent can't edit them. */
   pageSecret: Buffer;
   maxPageSize: number;
+  /** Opens people's upstream tokens (S6). */
+  vaultKey: Buffer;
   /** Planted defects (S4 self-test only; refused in production). */
   broken: ReadonlySet<Defect>;
 };
@@ -57,6 +60,7 @@ export function loadConfig(env = process.env): GatewayConfig {
     authorizationServers: [`${publicUrl}/api/auth`],
     pageSecret: env.PAGE_SECRET ? Buffer.from(env.PAGE_SECRET, "utf8") : randomBytes(32),
     maxPageSize: 50,
+    vaultKey: vaultKey(env),
     broken: parseBroken(env.AIPASS_BROKEN, env),
   };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Permission } from "@aipass/shared";
-import { Ban, KeyRound, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Ban, Hospital, KeyRound, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -166,6 +166,63 @@ function Approvals() {
   );
 }
 
+type Elsewhere = { id: string; name: string; connected: boolean; connectedAt: string | null };
+
+/** EHRs my AIs read from (S6): connect my record there once, or disconnect it. */
+function RecordsElsewhere() {
+  const list = useApi<Elsewhere[]>("/person/fhir");
+  // Back from a SMART launch: say how it went, then tidy the URL.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const ok = q.get("connected");
+    const err = q.get("connect_error");
+    if (ok) toast.success("Connected. Your AIs can read that record now, within what you allow.");
+    if (err) toast.error(err);
+    if (ok || err) window.history.replaceState(null, "", "/my-ais");
+  }, []);
+  if (!list.data?.length) return null;
+  async function disconnect(id: string) {
+    await api(`/person/fhir/${id}/disconnect`, { method: "POST" });
+    await list.reload();
+  }
+  return (
+    <Card data-testid="records-elsewhere">
+      <CardHeader>
+        <CardTitle>Your records elsewhere</CardTitle>
+        <CardDescription>
+          Some of your AIs read your record at another hospital system. Connect it once with that
+          system&apos;s own sign-in. aipass keeps the key locked away; the AIs never get it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {list.data.map((s) => (
+          <div
+            key={s.id}
+            data-server={s.id}
+            className="flex items-center justify-between rounded-md border p-3 text-sm"
+          >
+            <span className="flex items-center gap-2 font-medium">
+              <Hospital className="size-4" /> {s.name}
+            </span>
+            {s.connected ? (
+              <span className="flex items-center gap-2">
+                <Badge variant="secondary">Connected</Badge>
+                <Button size="sm" variant="outline" onClick={() => disconnect(s.id)}>
+                  Disconnect
+                </Button>
+              </span>
+            ) : (
+              <Button size="sm" asChild>
+                <a href={`/api/person/fhir/${s.id}/connect`}>Connect</a>
+              </Button>
+            )}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function MyAisPage() {
   const router = useRouter();
   const data = useApi<{ person: { displayName: string } | null; ais: MyAi[] }>("/person/ais", {
@@ -214,6 +271,7 @@ export default function MyAisPage() {
         </div>
       </div>
       <Approvals />
+      <RecordsElsewhere />
       {data.data.ais.length === 0 && data.data.person && (
         <p className="text-sm text-muted-foreground">No AI may act for you yet.</p>
       )}

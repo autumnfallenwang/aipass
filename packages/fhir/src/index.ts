@@ -1,6 +1,7 @@
 export {
   AIPASS_SYSTEM,
   type AuditInput,
+  type AuditTarget,
   buildAuditEvent,
   buildDevice,
   buildProvenance,
@@ -8,6 +9,7 @@ export {
 export { FhirClient, type FhirClientOptions, FhirError } from "./client.ts";
 export { normaliseRef, patientRefsOf } from "./compartment.ts";
 export { GROUP_QUERIES, type GroupQuery, groupOf } from "./groups.ts";
+export { smartLauncherFhirUrl } from "./launcher.ts";
 export { maskPatient } from "./mask.ts";
 export {
   approvalChallenge,
@@ -22,6 +24,17 @@ export {
 } from "./proposal.ts";
 export { receiptSentence, type SentenceInput } from "./sentence.ts";
 export { type SimpleRecord, simplify } from "./simplify.ts";
+export {
+  authorizeUrl,
+  discoverSmart,
+  exchangeCode,
+  pkcePair,
+  refreshTokens,
+  type SmartClient,
+  type SmartEndpoints,
+  SmartError,
+  type SmartTokens,
+} from "./smart.ts";
 export type {
   Bundle,
   BundleEntry,

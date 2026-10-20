@@ -51,6 +51,7 @@ export type RefusalCode =
   | "approval_wrong_person"
   | "approval_not_verified"
   | "check_failed"
+  | "not_connected"
   | "invalid_change";
 
 export type Rule = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;

@@ -1,7 +1,7 @@
 import { type CallContext, type Db, loadCallContext } from "@aipass/db";
 import {
+  type AuditTarget,
   type Bundle,
-  type FhirClient,
   GROUP_QUERIES,
   groupOf,
   labelsOf,
@@ -27,6 +27,7 @@ import type { Defect } from "./broken.ts";
 import type { GatewayConfig } from "./config.ts";
 import { openPage, sealPage } from "./paging.ts";
 import { AuditWriteFailed, type Recorder } from "./recorder.ts";
+import { isTarget, type Target, type Upstreams } from "./upstream.ts";
 
 export type Mode = "live" | "preview";
 
@@ -83,13 +84,19 @@ export class Guard {
   constructor(
     private readonly deps: {
       db: Db;
-      fhir: FhirClient;
       config: GatewayConfig;
       recorder: Recorder;
+      upstreams: Upstreams;
       /** Planted defects (S4 self-test only). */
       broken?: ReadonlySet<Defect>;
     },
   ) {}
+
+  /** The FHIR server and pinned patient for an allowed call (S6). */
+  async target(r: Resolved): Promise<Target | Refuse> {
+    if (!r.person || !r.patientRef) return refuse(4, "person_unknown", "unknown person");
+    return this.deps.upstreams.target(r.ctx.agent?.fhirServerId, r.person, r.patientRef);
+  }
 
   /** Loads agent, role, person and grant live, and pins the patient. */
   async resolve(caller: Caller, override?: RoleOverride): Promise<Resolved & { pin: Verdict }> {
@@ -103,6 +110,8 @@ export class Guard {
             description: null,
             roleId: "",
             fhirDeviceId: null,
+            // Previews read aipass's own server, never a person's connected record.
+            fhirServerId: null,
             createdBy: null,
             createdAt: new Date(0),
             updatedAt: new Date(0),
@@ -212,16 +221,18 @@ export class Guard {
       return this.refused(caller, r, req, v);
     }
 
+    const target = await this.target(r);
+    if (!isTarget(target)) return this.refused(caller, r, req, target);
     const resCtx = {
       person: { displayName: r.person.name },
-      patientRef: r.patientRef,
+      patientRef: target.patientRef,
       requestGroup: req.group,
     };
     const patientFields = ctx.role?.patientFields ?? [];
 
     let fetched: { resources: Resource[]; next: string[]; queries: string[] };
     try {
-      fetched = await this.fetch(caller, req, r.patientRef);
+      fetched = await this.fetch(caller, req, target);
     } catch (err) {
       console.error(`FHIR fetch failed: ${(err as Error).message}`);
       return this.refused(
@@ -243,7 +254,7 @@ export class Guard {
     }
 
     const records: SimpleRecord[] = [];
-    const targets: string[] = [];
+    const targets: AuditTarget[] = [];
     const withheld: Withheld = { count: 0, reasons: [] };
     for (const res of fetched.resources) {
       const v = decideResource(resCtx, facts(res));
@@ -254,7 +265,8 @@ export class Guard {
       }
       const shown = res.resourceType === "Patient" ? maskPatient(res, patientFields) : res;
       records.push(simplify(shown));
-      targets.push(`${res.resourceType}/${res.id}`);
+      const local = `${res.resourceType}/${res.id}`;
+      targets.push(target.source ? { server: target.source.id, ref: local } : local);
     }
     withheld.reasons = [...new Set(withheld.reasons)];
 
@@ -262,7 +274,7 @@ export class Guard {
       fetched.next.length > 0
         ? sealPage(this.deps.config.pageSecret, {
             agentId: caller.agentId,
-            patientRef: r.patientRef,
+            patientRef: target.patientRef,
             group: req.group,
             links: fetched.next,
           })
@@ -324,9 +336,10 @@ export class Guard {
   private async fetch(
     caller: Caller,
     req: ReadRequest,
-    patientRef: string,
+    target: Target,
   ): Promise<{ resources: Resource[]; next: string[]; queries: string[] }> {
-    const { fhir, config } = this.deps;
+    const { config } = this.deps;
+    const { fhir, patientRef } = target;
     const queries = GROUP_QUERIES[req.group];
 
     if (req.ref) {

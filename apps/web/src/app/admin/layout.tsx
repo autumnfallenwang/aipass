@@ -8,6 +8,7 @@ import {
   KeyRound,
   Link2,
   LogOut,
+  Server,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const NAV = [
   { href: "/admin/people", label: "People", icon: Users },
   { href: "/admin/approvals", label: "Approvals", icon: Fingerprint },
   { href: "/admin/connections", label: "Connections", icon: Link2 },
+  { href: "/admin/fhir-servers", label: "FHIR servers", icon: Server },
   { href: "/admin/activity", label: "Activity", icon: Activity },
   { href: "/admin/health", label: "Health check", icon: HeartPulse },
 ];

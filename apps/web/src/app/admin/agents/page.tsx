@@ -36,7 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { type Agent, api, type Role, useApi } from "@/lib/api";
+import { type Agent, api, type FhirServer, type Role, useApi } from "@/lib/api";
 
 function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void }) {
   const [open, setOpen] = useState(false);
@@ -129,6 +129,19 @@ function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void })
 export default function AgentsPage() {
   const agents = useApi<Agent[]>("/admin/agents", { pollMs: 5000 });
   const roles = useApi<Role[]>("/admin/roles");
+  const servers = useApi<FhirServer[]>("/admin/fhir-servers");
+
+  async function setServer(a: Agent, value: string) {
+    try {
+      await api(`/admin/agents/${a.id}`, {
+        method: "PATCH",
+        json: { fhirServerId: value === "home" ? null : value },
+      });
+      await agents.reload();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }
   const [preview, setPreview] = useState<Agent | null>(null);
   const [apps, setApps] = useState<Agent | null>(null);
 
@@ -157,6 +170,7 @@ export default function AgentsPage() {
             <TableHead>Agent</TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Records from</TableHead>
             <TableHead>Gateway URL</TableHead>
             <TableHead>Last activity</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -181,6 +195,23 @@ export default function AgentsPage() {
                 >
                   {a.status === "active" ? "Active" : "Stopped"}
                 </Badge>
+              </TableCell>
+              <TableCell>
+                <Select value={a.fhirServerId ?? "home"} onValueChange={(v) => setServer(a, v)}>
+                  <SelectTrigger aria-label={`Records for ${a.name}`} size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="home">aipass&apos;s FHIR server</SelectItem>
+                    {(servers.data ?? [])
+                      .filter((s) => s.enabled || s.id === a.fhirServerId)
+                      .map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </TableCell>
               <TableCell>
                 <button

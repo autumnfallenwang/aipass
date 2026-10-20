@@ -1,5 +1,5 @@
 import { appendReceipt, type Db, newId } from "@aipass/db";
-import { buildAuditEvent, type FhirClient } from "@aipass/fhir";
+import { type AuditTarget, buildAuditEvent, type FhirClient } from "@aipass/fhir";
 import type { Action, Group } from "@aipass/shared";
 import type { Defect } from "./broken.ts";
 
@@ -20,7 +20,7 @@ export type ReceiptInput = {
   sentence: string;
   count?: number;
   withheld?: number;
-  targets?: string[];
+  targets?: AuditTarget[];
   mode: "live" | "preview";
 };
 

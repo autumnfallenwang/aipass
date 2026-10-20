@@ -45,6 +45,8 @@ export const agents = pgTable("agents", {
     .references(() => roles.id),
   status: text("status").$type<AgentStatus>().notNull().default("active"),
   fhirDeviceId: text("fhir_device_id"),
+  /** Where this agent's records live (S6). Null: aipass's own FHIR server. */
+  fhirServerId: text("fhir_server_id").references(() => fhirServers.id),
   createdBy: text("created_by"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -221,3 +223,59 @@ export const connections = pgTable("connections", {
   enabled: boolean("enabled").notNull().default(true),
   createdAt: createdAt(),
 });
+
+/**
+ * FHIR servers other than aipass's own (S6): an EHR that speaks SMART on
+ * FHIR. A person connects their record there once (a SMART standalone
+ * launch); the gateway then reads it for them with the token in the vault.
+ */
+export const fhirServers = pgTable("fhir_servers", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  baseUrl: text("base_url").notNull().unique(),
+  authorizeUrl: text("authorize_url").notNull(),
+  tokenUrl: text("token_url").notNull(),
+  clientId: text("client_id").notNull(),
+  /** Sealed with the vault key; null for a public client. */
+  clientSecretSealed: text("client_secret_sealed"),
+  scope: text("scope").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: createdAt(),
+});
+
+/** A SMART launch in progress: single use, 10 minutes. */
+export const smartLaunches = pgTable("smart_launches", {
+  state: text("state").primaryKey(),
+  personId: text("person_id")
+    .notNull()
+    .references(() => persons.id, { onDelete: "cascade" }),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => fhirServers.id, { onDelete: "cascade" }),
+  codeVerifier: text("code_verifier").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+/**
+ * The vault: a person's tokens for one FHIR server, sealed (AES-256-GCM,
+ * bound to the person and server). Only the gateway opens it; agents never
+ * see what's inside. The patient is pinned from the launch.
+ */
+export const vault = pgTable(
+  "vault",
+  {
+    personId: text("person_id")
+      .notNull()
+      .references(() => persons.id, { onDelete: "cascade" }),
+    serverId: text("server_id")
+      .notNull()
+      .references(() => fhirServers.id, { onDelete: "cascade" }),
+    /** The patient id at that server, from the token response. */
+    patientId: text("patient_id").notNull(),
+    tokensSealed: text("tokens_sealed").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    connectedAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.personId, t.serverId] })],
+);

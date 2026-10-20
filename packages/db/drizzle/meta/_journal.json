@@ -36,6 +36,13 @@
       "when": 1792467593930,
       "tag": "0004_fancy_caretaker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792468533738,
+      "tag": "0005_condemned_multiple_man",
+      "breakpoints": true
     }
   ]
 }

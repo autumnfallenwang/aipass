@@ -10,6 +10,11 @@ export async function asAgent(agentId: string, personId: string) {
   });
   if (!res.ok) throw new Error(`dev pass: ${res.status} ${await res.text()}`);
   const { token } = (await res.json()) as { token: string };
+  return withPass(agentId, token);
+}
+
+/** Plays the AI agent with a pass it got some other way (OAuth, token exchange). */
+export async function withPass(agentId: string, token: string) {
   const client = new Client({ name: "e2e-agent", version: "0.0.0" });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(`${E2E.gateway}/agents/${agentId}/mcp`), {

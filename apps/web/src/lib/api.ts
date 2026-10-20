@@ -78,6 +78,8 @@ export type Agent = {
   roleId: string;
   roleName: string | null;
   status: "active" | "stopped";
+  /** Where its records live; null for aipass's own FHIR server (S6). */
+  fhirServerId: string | null;
   mcpUrl: string;
   lastActivity: string | null;
   createdAt: string;
@@ -142,3 +144,13 @@ export type PreviewGroup =
   | { group: Group; decision: "refuse"; rule: number; reason: string };
 
 export type Preview = { agentId: string; personId: string; groups: PreviewGroup[] };
+
+export type FhirServer = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  clientId: string;
+  confidential: boolean;
+  scope: string;
+  enabled: boolean;
+};
