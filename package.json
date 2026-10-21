@@ -2,6 +2,7 @@
   "name": "aipass",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "A pass for AI in healthcare: a permission gateway between AI agents and FHIR.",
   "type": "module",
   "packageManager": "pnpm@10.29.3",

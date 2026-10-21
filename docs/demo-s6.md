@@ -75,9 +75,9 @@ The plan asks for each combination of login and records:
 
 | | aipass's FHIR (HAPI) | EHR over SMART (launcher) | Epic sandbox (read) |
 |---|---|---|---|
-| **aipass's own login** | ✅ S1 call, check A 16/16 | ✅ S1 call, check A 16/16 | ⏸ needs an Epic app registration (owner) |
+| **aipass's own login** | ✅ S1 call, check A 16/16 | ✅ S1 call, check A 16/16 | ⏸ needs an Epic app registration (maintainer) |
 | **Hospital login (Keycloak)** | ✅ S1 call, check A 16/16 | ✅ S1 call, check A 16/16 · real Claude Code (above) | ⏸ |
-| **Google** | ⏸ needs a Google OAuth client (owner) | ⏸ | ⏸ |
+| **Google** | ⏸ needs a Google OAuth client (maintainer) | ⏸ | ⏸ |
 
 The four local cells run on every CI build: [`apps/web/e2e/matrix.spec.ts`](../apps/web/e2e/matrix.spec.ts). Each one runs:
 - the S1 call with a pass from that cell's login;

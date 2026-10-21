@@ -112,4 +112,4 @@ Google works the same way. On Google Cloud, create an OAuth client (web applicat
 - audience = that OAuth client's id. Google's ID tokens carry the client id as `aud`; exchange them with `subject_token_type=urn:ietf:params:oauth:token-type:id_token`;
 - the client id and secret, for sign-in.
 
-> The Google cell of the S6 matrix needs a Google Cloud OAuth client that only the project owner can create. It hasn't been run yet; see the [plan](../PLAN.md).
+> The Google cell of the S6 matrix needs a Google Cloud OAuth client that only the project maintainer can create. It hasn't been run yet; see the [plan](../PLAN.md).

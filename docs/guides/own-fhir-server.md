@@ -9,7 +9,12 @@ The rules are the same either way: role ∩ grant, the patient compartment, lock
 
 ## aipass's own server
 
-Set `FHIR_BASE_URL` for the api and the gateway. If the server wants a credential, set `FHIR_AUTHORIZATION` to the whole header value, e.g. `Bearer …`. That is the gateway's own credential: agents never see it.
+It's registered like every other server (D18): **Admin → FHIR servers** lists it first, marked *aipass's own*.
+- **Test** says whether it answers as FHIR, which version and software, and how many patients it holds.
+- **Edit** changes its name, its address and the credential aipass signs in with (the whole `Authorization` header, e.g. `Bearer …`, stored sealed). A new address must answer as FHIR before it's saved. The api and the gateway follow the change within seconds, with no restart.
+- It can't be switched off: the audit log lives there.
+
+On a first start aipass registers it from `FHIR_BASE_URL` and `FHIR_AUTHORIZATION`. After that the registered entry is what counts, and the settings are only read again on a fresh database. The credential is aipass's own: agents never see it.
 
 The server must:
 - accept FHIR R4 search, read and create;
@@ -36,7 +41,7 @@ Agents never see the token, and never see the EHR's address either:
    - a confidential client if the EHR allows it;
    - redirect URI `<your aipass origin>/api/person/fhir/callback`;
    - scopes: by default aipass asks for `launch/patient openid fhirUser offline_access patient/*.rs patient/Observation.c patient/Provenance.c` (SMART v2). For an EHR that uses SMART v1 scopes, enter them when adding the server, e.g. `launch/patient openid fhirUser offline_access patient/*.read`.
-2. **Add the server in aipass:** *Admin → FHIR servers → Add FHIR server*, with:
+2. **Add the server in aipass:** *Admin → FHIR servers → Add an EHR*, with:
    - its FHIR base URL. aipass reads `<base>/.well-known/smart-configuration` for the endpoints;
    - the client id and secret. The secret is sealed in the vault and never shown again.
 3. **Point agents at it.** On *Agents*, change the agent's **Records from** to the server.
@@ -85,4 +90,4 @@ The launcher skips its own login, so **Connect** on Maria's *My AIs* comes strai
    - those scopes.
 3. Connect with one of Epic's sandbox patients.
 
-> The Epic cell of the S6 matrix needs an Epic app registration that only the project owner can make. It hasn't been run yet; see the [plan](../PLAN.md).
+> The Epic cell of the S6 matrix needs an Epic app registration that only the project maintainer can make. It hasn't been run yet; see the [plan](../PLAN.md).

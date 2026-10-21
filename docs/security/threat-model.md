@@ -6,7 +6,7 @@ This page says:
 - what stops them, and which test proves it;
 - what is still open.
 
-It covers v1.0. It was written by the project, not by an independent reviewer. The self-check against OWASP ASVS Level 2 is in [asvs-l2.md](asvs-l2.md).
+It covers v0.5, the public demonstration. It was written by the project, not by an independent reviewer. The self-check against OWASP ASVS Level 2 is in [asvs-l2.md](asvs-l2.md).
 
 ## The system in one picture
 
@@ -66,6 +66,7 @@ Each row names the control and the test that proves it. "Probe" means the health
 | Threat | Control | Proof |
 |---|---|---|
 | Reads another patient's record | The patient is pinned from the person behind the pass (or the SMART launch); every returned resource must be in that patient's compartment | probe `wrong_patient`; planted `compartment`; `s6-upstream`: John's note via Maria's EHR token is refused |
+| Acting for a clinician, reads a patient who isn't in their care, or the previous patient after a switch (S10) | The pass names the patient the clinician has open, chosen from their care team. On every call the gateway checks, live, that this patient is still in an active CareTeam with them at the record server and is the one they have open now; every returned record must belong to that patient. A refusal doesn't name a patient who isn't theirs | `s10-staff.int.test.ts` (not in care, left the care team, switched patient, another patient's note); `staff.spec.ts` |
 | Reads a group its role or the person's grant doesn't allow | role ∩ grant, checked live on every call (rules 3–4) | probes `role_escape`, `revoked_grant`; planted `role`, `grant` |
 | Pulls extra records in through `_include`, or a server sends more than was asked for | Only safe search parameters reach the server; unknown arguments are refused (strict schemas); every returned resource is filtered again | probe `include_escape`; `s1-filter.int.test.ts` (a "compromised upstream" smuggling records) |
 | Reaches a locked category (mental health, SUD, HIV, …) | Locked labels are always withheld, unknown labels are refused, and withheld records are counted but never shown | probe `locked_label_leak`; planted `labels` |

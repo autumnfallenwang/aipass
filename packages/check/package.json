@@ -2,6 +2,7 @@
   "name": "@aipass/check",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "The aipass health check: identity and authorization probes for any agent-to-FHIR system.",
   "exports": {

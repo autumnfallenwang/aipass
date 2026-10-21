@@ -2,11 +2,12 @@
 
 **A pass for AI in healthcare.**
 
-Let AI help with your health records, on your terms: it sees only what you allow, asks before it changes anything, and you can stop it anytime.
+Let AI agents work with patient records on a clinic's terms: each agent acts for a named staff member or patient, sees only what its task needs, asks before it changes anything, and every access is recorded.
 
 ## What it does
 
-- **Gives each AI its own pass**, naming the AI and the person it acts for. The AI never uses the person's password.
+- **Gives each AI its own pass**, naming the AI and the staff member or patient it acts for. The AI never uses that person's password.
+- **Acts for a clinician, on the patient they have open.** When the person is a staff member, the pass also names the patient they have open. On every call the gateway checks that this patient is in their care, according to the record system's own care team: [docs/demo-s10.md](docs/demo-s10.md).
 - **Checks the rules on every request**: the clinic's role for that AI, the person's own "yes", and the record's sensitivity labels. Example: "labs yes, therapy notes never".
 - **Shows the admin exactly what each AI sees.** "Preview as this role" opens a person's chart through the same checks the AI goes through.
 - **Writes a receipt for every request**, refusals included. Each one is a plain-English sentence plus an AuditEvent in the FHIR record's own audit log, naming both the AI and the person.
@@ -49,20 +50,22 @@ pnpm dev
 `pnpm dev` does the following:
 1. Starts Postgres and a HAPI FHIR server. On a first run Docker pulls the HAPI image (about 600 MB); after that HAPI starts in under a minute.
 2. Loads the synthetic patients.
-3. Creates the demo: two AI agents (a Diabetes Coach and a Scheduling Assistant), their roles, and Maria's agreement to both.
+3. Creates the demo: three AI agents (a Diabetes Coach and a Scheduling Assistant for Maria, a patient; a Visit Assistant for Dr. Lee, a clinician), their roles, and each person's agreement.
 4. Runs the apps.
 
 Then:
 
 1. Open **http://localhost:3000**. The first account you create becomes the admin.
-2. **Agents** lists both AIs. Each has its own gateway URL.
+2. **Agents** lists the three AIs. Each has its own gateway URL.
 3. **Roles → Scheduling Assistant** shows the role. Pick **Maria Santos** as the test person, and the panel on the right shows **her chart as that AI sees it**:
    - her name, her phone number and two appointments;
    - "1 withheld: *mental-health records are always private*" (that is her therapy appointment);
    - everything else hidden (*not in the Scheduling Assistant role*).
-4. Connect a real AI with just its gateway URL. In [`docs/demo-s3.md`](docs/demo-s3.md), Claude Code signs in through aipass and Maria consents. She unticks vital signs, and later revokes the AI on her "My AIs" page. Her demo login is `maria@example.org` / `maria-demo-password`.
+4. Chat with an AI, in the browser. Add a model on **AI models** (any OpenAI-compatible endpoint, such as a local Ollama), give it to the Diabetes Coach, and Maria opens **Chat** on her "My AIs" page: [`docs/demo-s8.md`](docs/demo-s8.md). The chat is an AI app like any other: it asks Maria first, and the gateway checks and records every lookup.
+5. Chat as a clinician. Sign in as Dr. Lee (`lee@example.org` / `lee-demo-password`), open **Chat** with the Visit Assistant, and pick a patient in her care. The AI reads that patient's record only; another patient's record is refused: [`docs/demo-s10.md`](docs/demo-s10.md).
+6. Or connect an outside AI with just its gateway URL. In [`docs/demo-s3.md`](docs/demo-s3.md), Claude Code signs in through aipass and Maria consents. She unticks vital signs, and later revokes the AI on her "My AIs" page. Her demo login is `maria@example.org` / `maria-demo-password`.
    *(For agents without a browser, [`docs/demo-s1.md`](docs/demo-s1.md) uses a short-lived pass from a helper script instead.)*
-5. **Activity** shows a receipt for every request. **Verify chain** checks that none has been edited or removed.
+7. **Activity** shows a receipt for every request, and which app made it. **Verify chain** checks that none has been edited or removed.
 
 While `pnpm dev` runs, `pnpm smoke` in a second terminal checks that every service is healthy.
 
@@ -81,6 +84,8 @@ To try another login system and an EHR, also start the local stand-ins: `pnpm se
 
 ```
  Admin / person (browser) ──► web (Next.js) ──/api──► api (Hono + Better Auth) ──► Postgres
+                                                         └─ built-in chat ──► any OpenAI-compatible model
+                                                                 │ (an AI app like any other)
  AI client (MCP) ──pass──► gateway (Hono + MCP) ──► checks role ∩ grant ∩ labels, live ──► FHIR server
                                     │                                        └─(vault token)──► an EHR over SMART
                                     └──► receipt + AuditEvent for every call
@@ -96,6 +101,7 @@ To try another login system and an EHR, also start the local stand-ins: `pnpm se
 | `packages/fhir` | FHIR helpers: groups, labels, patient compartment, audit records |
 | `packages/db` | Database schema, hash-chained receipts, demo seed |
 | `packages/check` | The health check: probes, target adapters, grades |
+| `packages/chat` | The built-in chat: an OpenAI-compatible model client, an MCP client for the gateway, and the loop between them |
 | `fixtures/` | Synthetic patients (Maria, John, two Synthea patients) |
 | `deploy/` | Dev services (`compose.yaml`: Postgres, HAPI, Keycloak, the SMART launcher), the Keycloak realm, the Helm chart |
 | `Dockerfile`, `compose.yaml` | The three images, and the whole stack in one command |
@@ -120,15 +126,14 @@ CI also builds the containers and runs `docker compose up`, which must score A o
 
 ## Status
 
-**v1.0.** Everything in the [plan](docs/PLAN.md) is built:
-- the guard;
-- the admin UI;
-- OAuth with the person's consent;
-- the health check;
-- passkey-approved changes;
-- any login and any FHIR server;
-- containers, signed releases and the security docs.
+**Public demonstration (v0.5, October 2026), synthetic data only.** All four functions work end to end: each AI agent gets its own identity tied to the person it acts for, is limited to what its task needs, has every access recorded, and needs a person's approval before changing a record.
 
-A few checks wait on registrations or devices only the project owner has (Google, Epic's sandbox, a real phone); the plan lists them. The plan, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
+Version 1.0, ready for organizations to trial, is planned for Q3 2027. What remains is in the [roadmap](docs/ROADMAP.md). The build stages, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
 
-No licence has been chosen yet, so all rights are reserved for now (see [decisions](docs/decisions.md)).
+## Maintainer
+
+aipass is designed and maintained by Aaron (Qiushi) Wang ([@autumnfallenwang](https://github.com/autumnfallenwang)), who sets the scope, the security design, the decisions in [docs/decisions.md](docs/decisions.md) and the tests each stage must pass, and reviews every change. AI coding assistants are used for implementation and for independent review runs.
+
+## Licence
+
+Licensed under the [Apache License 2.0](LICENSE).

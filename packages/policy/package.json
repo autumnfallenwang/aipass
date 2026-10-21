@@ -2,6 +2,7 @@
   "name": "@aipass/policy",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "The aipass decision engine. Pure TypeScript: no framework, network or database imports.",
   "exports": {

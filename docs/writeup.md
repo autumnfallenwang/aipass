@@ -1,6 +1,6 @@
 # Who did this, for whom? Identity for AI agents on FHIR
 
-*aipass v1.0, October 2026. Synthetic data only.*
+*aipass v0.5, the public demonstration, October 2026. Synthetic data only.*
 
 An AI assistant reads a patient's lab results, or adds a blood-glucose reading to their record. Afterwards, three questions have to have clear answers:
 
@@ -123,7 +123,7 @@ aipass gets an A in every cell of its own test matrix:
 
 - **Passes are bearer tokens** for up to five minutes. Sender-constrained tokens (DPoP) would close that window once agent clients support them.
 - **The operator is trusted.** Whoever controls the database and keys controls aipass. Keys in a KMS, and receipts anchored outside, would narrow that.
-- **The Google login and Epic's sandbox are documented but not yet run.** Both need registrations only the project owner can make.
+- **The Google login and Epic's sandbox are documented but not yet run.** Both need registrations only the project maintainer can make.
 - **The rules are plain TypeScript**, and the grant format is aipass's own. Policy engines (Cedar) and SMART Permission Tickets were considered. Neither is needed yet: the rules fit on one page and are tested line by line.
 
 See the [threat model](security/threat-model.md) and the [ASVS Level 2 self-check](security/asvs-l2.md) for the full list.
