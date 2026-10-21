@@ -126,7 +126,7 @@ CI also builds the containers and runs `docker compose up`, which must score A o
 
 ## Status
 
-**Public demonstration (v0.5, October 2026), synthetic data only.** All four functions work end to end: each AI agent gets its own identity tied to the person it acts for, is limited to what its task needs, has every access recorded, and needs a person's approval before changing a record.
+**Public demonstration (v0.6, October 2026), synthetic data only.** All four functions work end to end: each AI agent gets its own identity tied to the person it acts for, is limited to what its task needs, has every access recorded, and needs a person's approval before changing a record.
 
 Version 1.0, ready for organizations to trial, is planned for Q3 2027. What remains is in the [roadmap](docs/ROADMAP.md). The build stages, progress and decisions are in [`docs/`](docs/); start with [the plan](docs/PLAN.md).
 

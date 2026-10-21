@@ -457,7 +457,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - [x] Integration: chat ↔ real gateway ↔ HAPI, with a scripted fake model (`s8-chat.int.test.ts`, 6 tests)
 - [x] End-to-end (Playwright), clicks only (`chat.spec.ts`, 10 tests): the admin adds a model, tests it, gives it to the Diabetes Coach; Maria opens Chat, agrees, asks for her A1c and gets it; her mental-health medication stays private; the lookup shows in Activity via the chat; the model never received a pass or other credential; Stop and withdrawing the app each refuse the next lookup; a network-only role refuses a cloud model; disconnecting means she's asked again
 - [ ] By hand on localhost: a real model through an OpenAI-compatible endpoint, and a local Ollama as the fallback (maintainer)
-- [ ] Tag `v0.6.0` (with S9 and S10)
+- [x] Tag `v0.6.0` (with S9 and S10)
 
 ---
 
@@ -482,7 +482,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - [x] Unit: the suspend rule
 - [x] Integration (`people.int.test.ts`, 13 tests): 5,002 people, every list 5–28 ms; one person per record (aipass's server and EHRs); consent rules; removal takes the login and keeps the receipts
 - [x] End-to-end, clicks only (`people.spec.ts`, 9 tests): page, search (in the URL), filter, open a person (records at both servers, login, AIs, activity), pause (the agent's next call is refused, then works again), add from a FHIR search ("Already Maria Santos" for hers), only the person can say yes, remove, and the role preview's search picker
-- [ ] Tag `v0.6.0` (with S8 and S10)
+- [x] Tag `v0.6.0` (with S8 and S10)
 
 ---
 
@@ -530,7 +530,7 @@ Each stage has **Goal** (plain words), **Plan** (design plus anything to verify 
 - [x] End-to-end, clicks only (`staff.spec.ts`, 5 tests): Dr. Lee picks Maria, agrees, asks for her labs and gets them; switching to Carlo starts a new conversation; John's record is refused; Activity names both
 - [x] Demo: [demo-s10.md](demo-s10.md), clicks only
 - [ ] By hand on localhost: Dr. Lee with a real model (maintainer)
-- [ ] Tag `v0.6.0` (with S8 and S9)
+- [x] Tag `v0.6.0` (with S8 and S9)
 
 ---
 
@@ -590,9 +590,9 @@ AI apps like claude.ai connect through their own cloud, so they can only reach a
 | S5 Approved changes → v0.3 | ✅ done | Oct 19 | A1–A8 green; real Claude proposed → passkey → commit; a real-phone run waits for the maintainer |
 | S6 Any environment → v0.4 | ✅ done | Oct 20 | 4 local matrix cells green incl. the full check; real Claude Code as a headless agent; Google and Epic cells wait for the maintainer's registrations |
 | S7 Hardening → v0.5 | ✅ done | Oct 20 | containers (114 s from a clean Docker), signed releases, Helm chart, threat model, ASVS L2 self-check, write-up |
-| S8 Built-in chat + model connections → v0.6 | 🟡 in progress | Oct 21 | built and tested end to end; the maintainer's hand test and the tag are left |
-| S9 People at scale → v0.6 | 🟡 in progress | Oct 21 | built and tested end to end; the maintainer's UI test and the tag are left |
-| S10 Staff members → v0.6 | 🟡 in progress | Oct 21 | built and tested end to end (D21); the maintainer's UI test and the tag are left |
+| S8 Built-in chat + model connections → v0.6 | 🟡 in progress | Oct 21 | v0.6.0 tagged; the maintainer's hand test is left |
+| S9 People at scale → v0.6 | 🟡 in progress | Oct 21 | v0.6.0 tagged; the maintainer's UI test is left |
+| S10 Staff members → v0.6 | 🟡 in progress | Oct 21 | v0.6.0 tagged (D21); the maintainer's hand test is left |
 | S11 No terminal → v0.7 | ⬜ not started | after S10 | web UI only (D17) |
 
 _States: ⬜ not started · 🟡 in progress · ✅ done · ❌ blocked (say by what)._
@@ -603,6 +603,7 @@ _Newest first. One line per real event: a stage state change, a spike result, a 
 
 | Date | Event |
 |---|---|
+| 2026-10-21 | **v0.6.0 tagged:** S8, S9 and S10 released together, with the licence and the roadmap. CI green, including `docker compose up`. The maintainer's hand tests stay open, so the three stages stay in progress |
 | 2026-10-21 | **S10 built.** Prediction held: the care-team check adds 3.9 ms to a read (median 12.6 → 16.5 ms, local HAPI), and the S1–S9 suites needed only the demo's people count changed (two specs). Surprise: the record system names her *Maria Elena Santos* while aipass's person list says *Maria Santos*; a staff member's receipts use the record's name, since that's the record touched. The Visit Assistant also reads visit notes, so a direct read of another patient's record has a tool to be refused through. Unit 154, integration 134, end-to-end 62 green |
 | 2026-10-21 | **Prediction (S10, before building):** checking the care team on every call adds under 25 ms to a read (median, local HAPI). The S1–S9 suites pass with only the demo's counts changed (three agents and three people instead of two) |
 | 2026-10-21 | **S10 Staff members planned (maintainer):** an agent can act for a clinician, on the patient she has open (D21). "No terminal" moves to S11 |
