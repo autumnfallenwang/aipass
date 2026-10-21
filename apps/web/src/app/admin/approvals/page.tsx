@@ -3,15 +3,9 @@
 import { GROUP_TITLES, type Group } from "@aipass/shared";
 import { toast } from "sonner";
 import { PageHeader, timeAgo } from "@/components/page-header";
+import { PersonPicker } from "@/components/person-picker";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -20,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, type Person, useApi } from "@/lib/api";
+import { api, useApi } from "@/lib/api";
 
 type Rule = { roleId: string; roleName: string; group: Group; approverPersonId: string | null };
 type Row = {
@@ -38,7 +32,6 @@ const PATIENT = "__patient";
 
 export default function ApprovalsPage() {
   const rules = useApi<Rule[]>("/admin/approval-rules");
-  const persons = useApi<Person[]>("/admin/persons");
   const recent = useApi<Row[]>("/admin/approvals", { pollMs: 3000 });
 
   async function setApprover(r: Rule, value: string) {
@@ -83,25 +76,12 @@ export default function ApprovalsPage() {
                   <span className="font-medium">{r.roleName}</span> proposes{" "}
                   {GROUP_TITLES[r.group].toLowerCase()}
                 </span>
-                <Select
+                <PersonPicker
                   value={r.approverPersonId ?? PATIENT}
-                  onValueChange={(v) => setApprover(r, v)}
-                >
-                  <SelectTrigger
-                    className="w-56"
-                    aria-label={`Approver for ${r.roleName} ${r.group}`}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={PATIENT}>The patient</SelectItem>
-                    {(persons.data ?? []).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.displayName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(v) => setApprover(r, v)}
+                  label={`Approver for ${r.roleName} ${r.group}`}
+                  extra={[{ value: PATIENT, label: "The patient" }]}
+                />
               </div>
             ))}
             {rules.data?.length === 0 && (

@@ -3,6 +3,8 @@ export const E2E = {
   web: "http://localhost:4000",
   api: "http://localhost:4001",
   gateway: "http://localhost:4002",
+  /** The scripted model (S8, `fake-model.ts`). */
+  model: "http://127.0.0.1:4005",
 };
 
 export const E2E_ENV: Record<string, string> = {

@@ -80,11 +80,14 @@ test("admin registers an agent with that role; the agent sees only appointments;
   await expect(row).toBeVisible();
   await expect(row).toContainText("/agents/front-desk-bot/mcp");
 
-  // Maria agrees to the new agent (admin-managed until S3).
+  // Maria (a test person: the admin may set her grants, D19) gets the new agent.
   await page.getByRole("link", { name: "People" }).click();
+  await page.getByRole("button", { name: "Open Maria Santos" }).click();
+  await page.getByTestId("person-panel").getByRole("tab", { name: /^AIs/ }).click();
   await page.getByRole("combobox", { name: "Let an agent act for Maria Santos" }).click();
   await page.getByRole("option", { name: "Front Desk Bot" }).click();
   await expect(page.locator('[data-grant="maria:front-desk-bot"]')).toContainText("Agreed");
+  await page.keyboard.press("Escape");
 
   const agent = await asAgent("front-desk-bot", "maria");
   const appts = await agent.call("list_appointments");

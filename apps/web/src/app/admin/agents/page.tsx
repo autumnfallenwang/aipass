@@ -1,9 +1,10 @@
 "use client";
 
-import { AppWindow, Copy, Eye, Play, Plus, Square } from "lucide-react";
+import { AppWindow, Copy, Eye, Play, Plus, Sparkles, Square } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { toast } from "sonner";
 import { AgentAppsDialog } from "@/components/agent-apps";
+import { AgentModelDialog } from "@/components/agent-model";
 import { PageHeader, timeAgo } from "@/components/page-header";
 import { PreviewDialog } from "@/components/preview";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +37,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { type Agent, api, type FhirServer, type Role, useApi } from "@/lib/api";
+import {
+  type Agent,
+  api,
+  type FhirServer,
+  type ModelConnection,
+  type Role,
+  useApi,
+} from "@/lib/api";
 
 function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void }) {
   const [open, setOpen] = useState(false);
@@ -45,6 +53,7 @@ function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void })
     description: "",
     roleId: "",
     allowClaudeCode: true,
+    allowChat: true,
   });
 
   async function submit(e: SubmitEvent) {
@@ -53,7 +62,7 @@ function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void })
       const a = await api<Agent>("/admin/agents", { method: "POST", json: form });
       toast.success(`${a.name} registered`, { description: a.mcpUrl });
       setOpen(false);
-      setForm({ name: "", description: "", roleId: "", allowClaudeCode: true });
+      setForm({ name: "", description: "", roleId: "", allowClaudeCode: true, allowChat: true });
       onDone();
     } catch (err) {
       toast.error((err as Error).message);
@@ -115,6 +124,13 @@ function RegisterAgent({ roles, onDone }: { roles: Role[]; onDone: () => void })
             />
             Let Claude Code connect as this agent
           </Label>
+          <Label className="flex items-center gap-2 font-normal">
+            <Checkbox
+              checked={form.allowChat}
+              onCheckedChange={(on) => setForm({ ...form, allowChat: on === true })}
+            />
+            Let people chat with it in aipass (choose its model afterwards)
+          </Label>
           <DialogFooter>
             <Button type="submit" disabled={!form.name || !form.roleId}>
               Register
@@ -130,6 +146,8 @@ export default function AgentsPage() {
   const agents = useApi<Agent[]>("/admin/agents", { pollMs: 5000 });
   const roles = useApi<Role[]>("/admin/roles");
   const servers = useApi<FhirServer[]>("/admin/fhir-servers");
+  const models = useApi<ModelConnection[]>("/admin/model-connections");
+  const [modelFor, setModelFor] = useState<Agent | null>(null);
 
   async function setServer(a: Agent, value: string) {
     try {
@@ -171,6 +189,7 @@ export default function AgentsPage() {
             <TableHead>Role</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Records from</TableHead>
+            <TableHead>Model</TableHead>
             <TableHead>Gateway URL</TableHead>
             <TableHead>Last activity</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -202,9 +221,12 @@ export default function AgentsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="home">aipass&apos;s FHIR server</SelectItem>
+                    <SelectItem value="home">
+                      {(servers.data ?? []).find((s) => s.kind === "aipass")?.name ??
+                        "aipass's FHIR server"}
+                    </SelectItem>
                     {(servers.data ?? [])
-                      .filter((s) => s.enabled || s.id === a.fhirServerId)
+                      .filter((s) => s.kind === "smart" && (s.enabled || s.id === a.fhirServerId))
                       .map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name}
@@ -212,6 +234,22 @@ export default function AgentsPage() {
                       ))}
                   </SelectContent>
                 </Select>
+              </TableCell>
+              <TableCell>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={`Model for ${a.name}`}
+                  className="max-w-48 justify-start"
+                  onClick={() => setModelFor(a)}
+                >
+                  <Sparkles />
+                  <span className="truncate">
+                    {a.model
+                      ? `${a.model} · ${(models.data ?? []).find((m) => m.id === a.modelConnectionId)?.name ?? ""}`
+                      : "Choose"}
+                  </span>
+                </Button>
               </TableCell>
               <TableCell>
                 <button
@@ -254,6 +292,15 @@ export default function AgentsPage() {
         </TableBody>
       </Table>
       {apps && <AgentAppsDialog agent={apps} onClose={() => setApps(null)} />}
+      {modelFor && (
+        <AgentModelDialog
+          agent={modelFor}
+          role={(roles.data ?? []).find((r) => r.id === modelFor.roleId)}
+          connections={models.data ?? []}
+          onClose={() => setModelFor(null)}
+          onSaved={agents.reload}
+        />
+      )}
       {preview && (
         <PreviewDialog
           title={`Preview: ${preview.name}`}

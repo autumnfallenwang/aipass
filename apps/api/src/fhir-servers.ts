@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import {
   agents,
+  asSmart,
   type Db,
+  fhirAuthBind,
   fhirServers,
   grants,
   persons,
@@ -45,18 +47,63 @@ function slugify(s: string): string {
 
 export const callbackUrl = () => `${config.publicUrl}/api/person/fhir/callback`;
 
-/** Admin: FHIR servers other than aipass's own (S6). Secrets go in sealed and never come out. */
-export function adminFhirServerRoutes(deps: { db: Db; fetch?: typeof fetch }) {
+const AipassServerPatch = z.strictObject({
+  name: z.string().trim().min(1).max(80).optional(),
+  baseUrl: z
+    .url({ protocol: /^https?$/ })
+    .transform((u) => u.replace(/\/$/, ""))
+    .optional(),
+  /** The whole Authorization header aipass sends, or null for none. */
+  authorization: z.string().min(1).max(4000).nullable().optional(),
+});
+
+type Metadata = { fhirVersion?: string; software?: { name?: string; version?: string } };
+
+/** Reads a server's CapabilityStatement: does it answer, and as what. */
+async function capability(
+  baseUrl: string,
+  headers: Record<string, string>,
+  doFetch: typeof fetch,
+): Promise<{ fhirVersion: string | null; software: string | null; ms: number }> {
+  const started = Date.now();
+  const res = await doFetch(`${baseUrl}/metadata`, {
+    headers: { accept: "application/fhir+json", ...headers },
+    signal: AbortSignal.timeout(10_000),
+    redirect: "error",
+  });
+  if (!res.ok) throw new Error(`it answered ${res.status}`);
+  const m = (await res.json().catch(() => null)) as Metadata | null;
+  if (!m || (m as { resourceType?: string }).resourceType !== "CapabilityStatement") {
+    throw new Error("it didn't answer with a FHIR CapabilityStatement");
+  }
+  const software = [m.software?.name, m.software?.version].filter(Boolean).join(" ") || null;
+  return { fhirVersion: m.fhirVersion ?? null, software, ms: Date.now() - started };
+}
+
+/**
+ * Admin: every FHIR server aipass uses (D18). aipass's own comes first; it's
+ * edited here, never switched off (the audit log lives there). The others
+ * are EHRs over SMART (S6). Secrets go in sealed and never come out.
+ */
+export function adminFhirServerRoutes(deps: {
+  db: Db;
+  fetch?: typeof fetch;
+  /** Tells this api to follow an edit to aipass's own server straight away. */
+  onAipassServerChanged?: () => Promise<void>;
+}) {
   const { db } = deps;
+  const doFetch = deps.fetch ?? fetch;
   const key = vaultKey();
   const app = new Hono();
 
   app.get("/fhir-servers", async (c) => {
     const rows = await db.select().from(fhirServers).orderBy(fhirServers.createdAt);
+    rows.sort((a, b) => Number(b.kind === "aipass") - Number(a.kind === "aipass"));
     return c.json(
-      rows.map(({ clientSecretSealed, ...r }) => ({
+      rows.map(({ clientSecretSealed, authHeaderSealed, ...r }) => ({
         ...r,
         confidential: Boolean(clientSecretSealed),
+        hasCredential: Boolean(authHeaderSealed),
       })),
     );
   });
@@ -77,6 +124,7 @@ export function adminFhirServerRoutes(deps: { db: Db; fetch?: typeof fetch }) {
       .insert(fhirServers)
       .values({
         id,
+        kind: "smart",
         name,
         baseUrl,
         ...endpoints,
@@ -87,11 +135,105 @@ export function adminFhirServerRoutes(deps: { db: Db; fetch?: typeof fetch }) {
       .onConflictDoNothing()
       .returning();
     if (!row) return c.json({ error: "a server with that name or URL already exists" }, 409);
-    const { clientSecretSealed, ...shown } = row;
+    const { clientSecretSealed, authHeaderSealed: _none, ...shown } = row;
     return c.json(
-      { ...shown, confidential: Boolean(clientSecretSealed), redirectUri: callbackUrl() },
+      {
+        ...shown,
+        confidential: Boolean(clientSecretSealed),
+        hasCredential: false,
+        redirectUri: callbackUrl(),
+      },
       201,
     );
+  });
+
+  // aipass's own server: its name, address and credential. A new address must
+  // answer as FHIR before it's saved: every agent's next call goes there.
+  app.patch("/fhir-servers/:id", async (c) => {
+    const [server] = await db
+      .select()
+      .from(fhirServers)
+      .where(eq(fhirServers.id, c.req.param("id")));
+    if (!server) return c.json({ error: "no such server" }, 404);
+    if (server.kind !== "aipass") {
+      return c.json({ error: "an EHR's SMART settings can't be edited here yet" }, 400);
+    }
+    const body = AipassServerPatch.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
+    const { name, baseUrl, authorization } = body.data;
+    if (baseUrl !== undefined || authorization !== undefined) {
+      const current = server.authHeaderSealed
+        ? unseal(vaultKeys(), server.authHeaderSealed, fhirAuthBind(server.id))
+        : null;
+      const header = authorization === undefined ? current : authorization;
+      try {
+        await capability(
+          baseUrl ?? server.baseUrl,
+          header ? { authorization: header } : {},
+          doFetch,
+        );
+      } catch (err) {
+        return c.json(
+          {
+            error: `that server didn't answer as FHIR (${(err as Error).message}); nothing was changed`,
+          },
+          400,
+        );
+      }
+    }
+    const [row] = await db
+      .update(fhirServers)
+      .set({
+        ...(name ? { name } : {}),
+        ...(baseUrl ? { baseUrl } : {}),
+        ...(authorization === undefined
+          ? {}
+          : {
+              authHeaderSealed:
+                authorization === null ? null : seal(key, authorization, fhirAuthBind(server.id)),
+            }),
+      })
+      .where(eq(fhirServers.id, server.id))
+      .returning();
+    await deps.onAipassServerChanged?.();
+    if (!row) return c.json({ error: "no such server" }, 404);
+    const { clientSecretSealed: _s, authHeaderSealed, ...shown } = row;
+    return c.json({ ...shown, confidential: false, hasCredential: Boolean(authHeaderSealed) });
+  });
+
+  // Test: does it answer as FHIR, which version and software, and (aipass's own) how many patients.
+  app.post("/fhir-servers/:id/test", async (c) => {
+    const [server] = await db
+      .select()
+      .from(fhirServers)
+      .where(eq(fhirServers.id, c.req.param("id")));
+    if (!server) return c.json({ error: "no such server" }, 404);
+    const headers: Record<string, string> =
+      server.kind === "aipass" && server.authHeaderSealed
+        ? { authorization: unseal(vaultKeys(), server.authHeaderSealed, fhirAuthBind(server.id)) }
+        : {};
+    try {
+      const cap = await capability(server.baseUrl, headers, doFetch);
+      let patients: number | null = null;
+      let smart: boolean | null = null;
+      if (server.kind === "aipass") {
+        const res = await doFetch(`${server.baseUrl}/Patient?_summary=count`, {
+          headers: { accept: "application/fhir+json", ...headers },
+          signal: AbortSignal.timeout(10_000),
+          redirect: "error",
+        });
+        const b = (await res.json().catch(() => null)) as { total?: number } | null;
+        patients = res.ok && typeof b?.total === "number" ? b.total : null;
+      } else {
+        smart = await discoverSmart(server.baseUrl, deps.fetch).then(
+          () => true,
+          () => false,
+        );
+      }
+      return c.json({ ok: true, ...cap, patients, smart });
+    } catch (err) {
+      return c.json({ ok: false, error: `it didn't answer as FHIR (${(err as Error).message})` });
+    }
   });
 
   for (const [verb, enabled] of [
@@ -99,6 +241,16 @@ export function adminFhirServerRoutes(deps: { db: Db; fetch?: typeof fetch }) {
     ["disable", false],
   ] as const) {
     app.post(`/fhir-servers/:id/${verb}`, async (c) => {
+      const [server] = await db
+        .select({ kind: fhirServers.kind })
+        .from(fhirServers)
+        .where(eq(fhirServers.id, c.req.param("id")));
+      if (server?.kind === "aipass") {
+        return c.json(
+          { error: "aipass's own FHIR server holds the audit log, so it can't be switched off" },
+          409,
+        );
+      }
       const [row] = await db
         .update(fhirServers)
         .set({ enabled })
@@ -145,7 +297,13 @@ export function personFhirRoutes(deps: { db: Db; auth: Auth; fetch?: typeof fetc
     const servers = await db
       .select()
       .from(fhirServers)
-      .where(and(inArray(fhirServers.id, ids), eq(fhirServers.enabled, true)));
+      .where(
+        and(
+          inArray(fhirServers.id, ids),
+          eq(fhirServers.enabled, true),
+          eq(fhirServers.kind, "smart"),
+        ),
+      );
     const links = await db.select().from(vault).where(eq(vault.personId, personId));
     return c.json(
       servers.map((s) => {
@@ -161,10 +319,11 @@ export function personFhirRoutes(deps: { db: Db; auth: Auth; fetch?: typeof fetc
   });
 
   app.get("/:id/connect", async (c) => {
-    const [server] = await db
+    const [row] = await db
       .select()
       .from(fhirServers)
       .where(and(eq(fhirServers.id, c.req.param("id")), eq(fhirServers.enabled, true)));
+    const server = asSmart(row);
     if (!server) return c.json({ error: "no such server" }, 404);
     const state = randomBytes(24).toString("base64url");
     const { verifier, challenge } = pkcePair();
@@ -200,7 +359,8 @@ export function personFhirRoutes(deps: { db: Db; auth: Auth; fetch?: typeof fetc
         back({ connect_error: "that sign-in link expired or isn't yours; try again" }),
       );
     }
-    const [server] = await db.select().from(fhirServers).where(eq(fhirServers.id, launch.serverId));
+    const [row] = await db.select().from(fhirServers).where(eq(fhirServers.id, launch.serverId));
+    const server = asSmart(row);
     if (!server?.enabled) return c.redirect(back({ connect_error: "that server is switched off" }));
     const error = c.req.query("error");
     const code = c.req.query("code");

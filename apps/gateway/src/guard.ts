@@ -12,7 +12,14 @@ import {
   type SimpleRecord,
   simplify,
 } from "@aipass/fhir";
-import { decideRequest, decideResource, type Refuse, refuse, type Verdict } from "@aipass/policy";
+import {
+  decideRequest,
+  decideResource,
+  firstName,
+  type Refuse,
+  refuse,
+  type Verdict,
+} from "@aipass/policy";
 import {
   ACTIONS,
   type Action,
@@ -65,6 +72,8 @@ export type ReadOutcome =
   | {
       decision: "allow";
       personName: string;
+      /** The patient whose records these are, when the person is a staff member (S10). */
+      patientName: string | null;
       records: SimpleRecord[];
       withheld: Withheld;
       nextPage?: string;
@@ -78,6 +87,10 @@ export type Resolved = {
   agentName: string;
   person: { id: string; name: string; ref: string } | null;
   patientRef: string | null;
+  /** The person is a staff member, acting on the patient they have open (S10, D21). */
+  staff: boolean;
+  /** That patient's name, from the record system (staff members only). */
+  patientName: string | null;
 };
 
 export class Guard {
@@ -95,7 +108,9 @@ export class Guard {
   /** The FHIR server and pinned patient for an allowed call (S6). */
   async target(r: Resolved): Promise<Target | Refuse> {
     if (!r.person || !r.patientRef) return refuse(4, "person_unknown", "unknown person");
-    return this.deps.upstreams.target(r.ctx.agent?.fhirServerId, r.person, r.patientRef);
+    return this.deps.upstreams.target(r.ctx.agent?.fhirServerId, r.person, r.patientRef, {
+      staff: r.staff,
+    });
   }
 
   /** Loads agent, role, person and grant live, and pins the patient. */
@@ -112,6 +127,10 @@ export class Guard {
             fhirDeviceId: null,
             // Previews read aipass's own server, never a person's connected record.
             fhirServerId: null,
+            modelConnectionId: null,
+            model: null,
+            fallbackConnectionId: null,
+            fallbackModel: null,
             createdBy: null,
             createdAt: new Date(0),
             updatedAt: new Date(0),
@@ -123,6 +142,7 @@ export class Guard {
             rules: [],
             permissions: override.role.permissions,
             patientFields: override.role.patientFields,
+            networkModelsOnly: false,
             createdAt: new Date(0),
             updatedAt: new Date(0),
           },
@@ -133,6 +153,7 @@ export class Guard {
                 agentId: override.agent.id,
                 permissions: override.role.permissions,
                 status: "active",
+                setBy: "admin",
                 grantedAt: new Date(0),
                 revokedAt: null,
                 updatedAt: new Date(0),
@@ -144,23 +165,65 @@ export class Guard {
       ? { id: ctx.person.id, name: ctx.person.displayName, ref: ctx.person.fhirRef }
       : null;
     let patientRef: string | null = null;
+    let patientName: string | null = null;
     let pin: Verdict = { decision: "allow" };
+    const staff = Boolean(person?.ref.startsWith("Practitioner/"));
     if (person) {
-      const personIsPatient = person.ref.startsWith("Patient/");
       const claimed = caller.claims.patient ? `Patient/${caller.claims.patient}` : null;
-      if (personIsPatient) {
+      if (person.ref.startsWith("Patient/")) {
         patientRef = person.ref;
         // A pass naming a different patient than its own person is not honoured.
         if (claimed && claimed !== person.ref) {
-          pin = refuse(5, "not_in_compartment", `not ${firstWord(person.name)}'s record`);
+          pin = refuse(5, "not_in_compartment", `not ${firstName(person.name)}'s record`);
         }
-      } else if (claimed) {
-        patientRef = claimed;
-      } else {
+      } else if (!staff || !claimed) {
         pin = refuse(5, "not_in_compartment", "no patient selected");
+      } else {
+        // A staff member (S10): the patient must be in their care at the record
+        // system, and the one they have open right now. Both are read live.
+        patientRef = claimed;
+        ({ pin, patientName } = await this.staffPin(person, claimed, ctx.openPatient));
       }
     }
-    return { ctx, agentName: ctx.agent?.name ?? caller.agentId, person, patientRef, pin };
+    return {
+      ctx,
+      agentName: ctx.agent?.name ?? caller.agentId,
+      person,
+      patientRef,
+      staff,
+      patientName,
+      pin,
+    };
+  }
+
+  /** Rule 5 for a staff member: the patient is in their care, and the one they have open. */
+  private async staffPin(
+    person: { name: string; ref: string },
+    claimed: string,
+    open: string | null,
+  ): Promise<{ pin: Verdict; patientName: string | null }> {
+    const who = firstName(person.name);
+    let care: Awaited<ReturnType<Upstreams["inCare"]>>;
+    try {
+      care = await this.deps.upstreams.inCare(person.ref, claimed);
+    } catch (err) {
+      console.error(`care team check failed: ${(err as Error).message}`);
+      const v = refuse(
+        0,
+        "check_failed",
+        "the record server didn't answer, so nothing was released",
+      );
+      return { pin: v, patientName: null };
+    }
+    if (!care) {
+      return { pin: refuse(5, "not_in_care", `not one of ${who}'s patients`), patientName: null };
+    }
+    const patientName = care.name ?? claimed;
+    if (open !== claimed) {
+      const v = refuse(5, "context_changed", `${who} has another patient open now`);
+      return { pin: v, patientName };
+    }
+    return { pin: { decision: "allow" }, patientName };
   }
 
   /** Rules 1–4 for this caller, plus the patient pin, with any planted defects applied. */
@@ -190,7 +253,9 @@ export class Guard {
             permissions: broken.has("role") ? EVERYTHING : ctx.role.permissions,
           }
         : null,
-      person: ctx.person ? { id: ctx.person.id, displayName: ctx.person.displayName } : null,
+      person: ctx.person
+        ? { id: ctx.person.id, displayName: ctx.person.displayName, status: ctx.person.status }
+        : null,
       grant: broken.has("grant")
         ? { status: "active", permissions: EVERYTHING }
         : ctx.grant
@@ -226,6 +291,7 @@ export class Guard {
     const resCtx = {
       person: { displayName: r.person.name },
       patientRef: target.patientRef,
+      staff: r.staff,
       requestGroup: req.group,
     };
     const patientFields = ctx.role?.patientFields ?? [];
@@ -284,6 +350,8 @@ export class Guard {
       decision: "allow",
       agentName: r.agentName,
       personName: r.person.name,
+      staff: r.staff,
+      patientName: r.patientName,
       action: "read",
       group: req.group,
       count: records.length,
@@ -295,6 +363,7 @@ export class Guard {
       rec = await this.deps.recorder.record(
         {
           agent: { id: caller.agentId, name: r.agentName },
+          clientId: caller.clientId ?? null,
           person: r.person,
           patientRef: r.patientRef,
           passJti: caller.claims.jti,
@@ -325,6 +394,7 @@ export class Guard {
     return {
       decision: "allow",
       personName: r.person.name,
+      patientName: r.staff ? r.patientName : null,
       records,
       withheld,
       nextPage,
@@ -409,6 +479,8 @@ export class Guard {
       decision: "refuse",
       agentName: r.agentName,
       personName: r.person?.name ?? null,
+      staff: r.staff,
+      patientName: r.patientName,
       action: "read",
       group: req.group,
       reason: v.reason,
@@ -416,6 +488,7 @@ export class Guard {
     });
     const rec = await this.deps.recorder.record({
       agent: { id: caller.agentId, name: r.agentName },
+      clientId: caller.clientId ?? null,
       person: r.person,
       patientRef: r.patientRef,
       passJti: caller.claims.jti,
@@ -444,8 +517,4 @@ const EVERYTHING: Permission[] = GROUPS.flatMap((g) => ACTIONS.map((a) => permis
 
 function factsOf(r: Resource) {
   return { group: groupOf(r), patientRefs: patientRefsOf(r), labels: labelsOf(r) };
-}
-
-function firstWord(s: string): string {
-  return s.split(/\s+/)[0] ?? s;
 }

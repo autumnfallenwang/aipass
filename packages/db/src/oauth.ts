@@ -137,3 +137,45 @@ export async function revokeRefreshTokens(
     .returning({ id: oauthRefreshToken.id });
   return rows.length;
 }
+
+/**
+ * The built-in chat (S8): an ordinary public OAuth client (PKCE, no secret),
+ * approved per agent in `agent_clients` like any other app, so its passes come
+ * from the person's consent and the gateway checks it on every call.
+ */
+export const CHAT_CLIENT_ID = "aipass-chat";
+export const CHAT_CLIENT_NAME = "aipass chat (built-in)";
+
+/** Where the chat's sign-in comes back to: the public origin, which proxies `/api/*` (D10). */
+export const chatCallbackUrl = (publicUrl: string) =>
+  `${publicUrl.replace(/\/$/, "")}/api/person/chat/callback`;
+
+/**
+ * Makes sure the built-in chat is a registered OAuth client that redirects to
+ * this install, linked to every agent the admin allowed it for.
+ */
+export async function ensureChatClient(
+  db: Db,
+  gatewayUrl: string,
+  publicUrl: string,
+): Promise<void> {
+  const now = new Date();
+  const fields = {
+    name: CHAT_CLIENT_NAME,
+    redirectUris: [chatCallbackUrl(publicUrl)],
+    tokenEndpointAuthMethod: "none",
+    applicationType: "web",
+    grantTypes: ["authorization_code", "refresh_token"],
+    responseTypes: ["code"],
+    scopes: ["openid", "offline_access"],
+    requirePKCE: true,
+    skipConsent: false,
+    disabled: false,
+    updatedAt: now,
+  };
+  await db
+    .insert(oauthClient)
+    .values({ id: CHAT_CLIENT_ID, clientId: CHAT_CLIENT_ID, createdAt: now, ...fields })
+    .onConflictDoUpdate({ target: oauthClient.clientId, set: fields });
+  await linkPendingClient(db, gatewayUrl, CHAT_CLIENT_ID);
+}

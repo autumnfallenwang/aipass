@@ -8,6 +8,7 @@
 | `john.json` | John Carter (`Patient/john`) | The "someone else" for wrong-patient tests. Has a lab, a note and an `HIV`-labelled condition |
 | `synthea/carlo.json` | A Synthea patient | Realistic, unlabelled background data |
 | `synthea/georgianna.json` | A Synthea patient | Realistic, unlabelled background data |
+| `staff/lee.json` | Dr. Grace Lee (`Practitioner/lee`) and her care teams | The staff member (S10). Her active `CareTeam`s list Maria and Carlo; John isn't in her care. Loaded last, because the teams point at patients |
 
 Each file is a FHIR R4 `transaction` bundle of `PUT`s with fixed ids, so loading it twice changes nothing:
 

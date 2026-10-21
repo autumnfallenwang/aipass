@@ -11,6 +11,7 @@ export {
   oauthResource,
   users,
 } from "./auth.ts";
+export * from "./fhir.ts";
 export * from "./ids.ts";
 export { runMigrations } from "./migrate.ts";
 export * from "./oauth.ts";

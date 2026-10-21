@@ -4,6 +4,10 @@ export type SentenceInput = {
   decision: "allow" | "refuse";
   agentName: string;
   personName: string | null;
+  /** The person is a staff member acting on a patient they have open (S10). */
+  staff?: boolean;
+  /** That patient's name, when it's known (staff members only). */
+  patientName?: string | null;
   action: Action | "connect";
   group: Group | null;
   /** Records returned (allow). */
@@ -33,14 +37,20 @@ export function receiptSentence(s: SentenceInput): string {
   if (s.decision === "refuse" && s.action === "connect") {
     return `${prefix}REFUSED: ${s.agentName} tried to connect: ${s.reason ?? "refused"}.`;
   }
+  // A staff member's records aren't what's touched: say whose they act for, and the patient.
+  const patient = s.staff && s.patientName ? ` (patient: ${s.patientName})` : "";
   if (s.decision === "refuse") {
-    const whose = s.personName ? `${possessive(s.personName)} ${what.many}` : what.many;
+    const whose = !s.personName
+      ? what.many
+      : s.staff
+        ? `${what.many} for ${s.personName}${patient}`
+        : `${possessive(s.personName)} ${what.many}`;
     return `${prefix}REFUSED: ${s.agentName} tried to ${attempt} ${whose}: ${s.reason ?? "refused"}.`;
   }
   const n = s.count ?? 0;
   const noun = n === 1 ? what.one : what.many;
   const forWhom = s.personName ? ` for ${s.personName}` : "";
-  let line = `${prefix}${s.agentName} ${past} ${n} ${noun}${forWhom}.`;
+  let line = `${prefix}${s.agentName} ${past} ${n} ${noun}${forWhom}${patient}.`;
   if (s.withheld && s.withheld.count > 0) {
     const w = s.withheld.count === 1 ? "1 record was" : `${s.withheld.count} records were`;
     line += ` ${w} withheld (${[...new Set(s.withheld.reasons)].join("; ")}).`;

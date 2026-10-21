@@ -15,9 +15,10 @@ async function waitForServer(base: string): Promise<void> {
 }
 
 /**
- * Loads every synthetic fixture bundle (`dir/*.json`, `dir/synthea/*.json`)
- * into a FHIR server, waiting for it to come up first. Idempotent: bundles are
- * transactions of PUTs with fixed ids.
+ * Loads every synthetic fixture bundle into a FHIR server, waiting for it to
+ * come up first: `dir/*.json`, then `dir/synthea/*.json`, then `dir/staff/*.json`
+ * (staff and their care teams point at patients, so they go last). Idempotent:
+ * bundles are transactions of PUTs with fixed ids.
  */
 export async function loadFixtures(
   baseUrl: string,
@@ -25,14 +26,12 @@ export async function loadFixtures(
   log = console.info,
 ): Promise<void> {
   const base = baseUrl.replace(/\/$/, "");
-  const files = [
-    ...readdirSync(dir)
+  const files = ["", "synthea", "staff"].flatMap((sub) =>
+    readdirSync(join(dir, sub))
       .filter((f) => f.endsWith(".json"))
-      .map((f) => join(dir, f)),
-    ...readdirSync(join(dir, "synthea"))
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => join(dir, "synthea", f)),
-  ];
+      .sort()
+      .map((f) => join(dir, sub, f)),
+  );
   await waitForServer(base);
   for (const file of files) {
     const res = await fetch(base, {

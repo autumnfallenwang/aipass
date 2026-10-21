@@ -1,4 +1,4 @@
-import { authSchema, connections, type Db, persons, users } from "@aipass/db";
+import { authSchema, connections, type Db, passPatientOf, persons, users } from "@aipass/db";
 import { cimd } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -11,7 +11,6 @@ import { jwt } from "better-auth/plugins";
 import { and, count, eq, isNotNull } from "drizzle-orm";
 import { config } from "./config.ts";
 import { agentIdOfResource, linkPendingClient } from "./oauth.ts";
-import { patientIdOf } from "./pass.ts";
 import { TOKEN_EXCHANGE, tokenExchange } from "./token-exchange.ts";
 
 export async function adminExists(db: Db): Promise<boolean> {
@@ -162,7 +161,8 @@ export function createAuth(db: Db) {
                 const [person] = user
                   ? await db.select().from(persons).where(eq(persons.userId, user.id))
                   : [];
-                const patient = person ? patientIdOf(person.fhirRef) : undefined;
+                // A patient's own record, or the patient a staff member has open (S10).
+                const patient = person ? await passPatientOf(db, person, agentIds[0]) : undefined;
                 return { act: { sub: agentIds[0] }, ...(patient ? { patient } : {}) };
               },
             },

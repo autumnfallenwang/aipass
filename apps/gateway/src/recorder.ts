@@ -8,6 +8,8 @@ export type ReceiptInput = {
   person: { id: string; name: string; ref: string } | null;
   patientRef: string | null;
   passJti: string | null;
+  /** The AI app (OAuth client) that held the pass, when it was an OAuth pass. */
+  clientId?: string | null;
   tool: string | null;
   action: Action | "connect";
   group: Group | null;
@@ -94,6 +96,7 @@ export class Recorder {
       passJti: r.passJti,
       mode: r.mode,
       auditEventId,
+      clientId: r.clientId ?? null,
     });
     return { receiptId, auditEventId };
   }

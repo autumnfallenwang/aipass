@@ -222,8 +222,16 @@ describe("S6: a SMART upstream", () => {
   it("won't open a vault entry that was moved to someone else", async () => {
     await connectMaria();
     const [row] = await h.db.select().from(vault).where(eq(vault.personId, "maria"));
-    // John's grant to the coach, with Maria's sealed tokens copied over.
-    await h.db.insert(vault).values({ ...(row as typeof vault.$inferInsert), personId: "john" });
+    // The same record can't be John's too (S9: one record, one person)…
+    await expect(
+      h.db.insert(vault).values({ ...(row as typeof vault.$inferInsert), personId: "john" }),
+    ).rejects.toThrow();
+    // …and Maria's sealed tokens, copied to a row of John's, don't open there.
+    await h.db.insert(vault).values({
+      ...(row as typeof vault.$inferInsert),
+      personId: "john",
+      patientId: "john-at-the-ehr",
+    });
     const s = await h.connect("diabetes-coach", await h.pass("diabetes-coach", "john"));
     const r = await s.call("search_labs");
     expect(r.isError).toBe(true);

@@ -161,7 +161,7 @@ test("cell: hospital login × aipass FHIR (token exchange, then the check)", asy
 
 test("the admin adds the clinic's EHR and points the coach at it", async () => {
   await admin.getByRole("link", { name: "FHIR servers" }).click();
-  await admin.getByRole("button", { name: "Add FHIR server" }).click();
+  await admin.getByRole("button", { name: "Add an EHR" }).click();
   await admin.getByLabel("Name").fill("Sunrise EHR");
   await admin.getByLabel("FHIR base URL").fill(EHR);
   await admin.getByLabel("SMART client ID").fill("aipass");

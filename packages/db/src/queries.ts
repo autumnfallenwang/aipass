@@ -1,7 +1,7 @@
 import { rulesToPermissions } from "@aipass/shared";
 import { and, eq, or } from "drizzle-orm";
 import type { Db } from "./index.ts";
-import { agentClients, agents, grants, persons, roles } from "./schema.ts";
+import { agentClients, agents, grants, patientContexts, persons, roles } from "./schema.ts";
 
 /**
  * Everything the gateway needs to decide one call, read fresh from the
@@ -30,6 +30,14 @@ export async function loadCallContext(db: Db, agentId: string, personKey: string
           .where(and(eq(grants.personId, person.id), eq(grants.agentId, agentId)))
           .limit(1)
       : [];
+  const [open] =
+    person && agentRow
+      ? await db
+          .select({ patientRef: patientContexts.patientRef })
+          .from(patientContexts)
+          .where(and(eq(patientContexts.personId, person.id), eq(patientContexts.agentId, agentId)))
+          .limit(1)
+      : [];
   const clients = agentRow
     ? await db
         .select({ clientId: agentClients.clientId })
@@ -44,7 +52,28 @@ export async function loadCallContext(db: Db, agentId: string, personKey: string
     role: role ? { ...role, permissions: rulesToPermissions(role.rules) } : null,
     person: person ?? null,
     grant: grant ?? null,
+    /** The patient a staff member has open with this agent (S10), as `Patient/<id>`. */
+    openPatient: open?.patientRef ?? null,
   };
+}
+
+/**
+ * The `patient` a pass names (S10): a patient's own record, or the patient a
+ * staff member has open with this agent. None when a staff member has nobody
+ * open; the gateway then refuses "no patient selected".
+ */
+export async function passPatientOf(
+  db: Db,
+  person: { id: string; fhirRef: string },
+  agentId: string,
+): Promise<string | undefined> {
+  const own = person.fhirRef.match(/^Patient\/(.+)$/)?.[1];
+  if (own || !person.fhirRef.startsWith("Practitioner/")) return own;
+  const [open] = await db
+    .select({ patientRef: patientContexts.patientRef })
+    .from(patientContexts)
+    .where(and(eq(patientContexts.personId, person.id), eq(patientContexts.agentId, agentId)));
+  return open?.patientRef.match(/^Patient\/(.+)$/)?.[1];
 }
 
 export type CallContext = Awaited<ReturnType<typeof loadCallContext>>;

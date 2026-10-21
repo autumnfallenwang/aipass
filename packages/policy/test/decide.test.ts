@@ -4,6 +4,7 @@ import {
   decideRequest,
   decideResource,
   effectivePermissions,
+  firstName,
   type RequestContext,
   type ResourceContext,
   type ResourceFacts,
@@ -54,6 +55,18 @@ describe("decideRequest (rules 1–4)", () => {
       3,
     ],
     ["unknown person", { person: null }, "unknown person", 4],
+    [
+      "person paused by the clinic (S9)",
+      { person: { id: "maria", displayName: "Maria Santos", status: "suspended" } },
+      "Maria's access is paused by the clinic",
+      4,
+    ],
+    [
+      "an active person",
+      { person: { id: "maria", displayName: "Maria Santos", status: "active" } },
+      null,
+      null,
+    ],
     ["no grant", { grant: null }, "Maria hasn't agreed to lab results", 4],
     [
       "revoked grant",
@@ -197,6 +210,45 @@ describe("decideResource (rules 3, 5, 6)", () => {
     } else {
       expect(v).toMatchObject({ decision: "refuse", reason, rule });
     }
+  });
+});
+
+describe("staff members (S10)", () => {
+  const staff: ResourceContext = {
+    person: { displayName: "Dr. Grace Lee" },
+    patientRef: "Patient/maria",
+    staff: true,
+    requestGroup: "labs",
+  };
+  const lab: ResourceFacts = { group: "labs", patientRefs: ["Patient/maria"], labels: [] };
+
+  it("the patient they have open: allowed", () => {
+    expect(decideResource(staff, lab)).toEqual({ decision: "allow" });
+  });
+
+  it("another patient's record: not the patient in context", () => {
+    expect(decideResource(staff, { ...lab, patientRefs: ["Patient/john"] })).toMatchObject({
+      decision: "refuse",
+      rule: 5,
+      code: "not_in_compartment",
+      reason: "not the patient in context",
+    });
+  });
+
+  it("locked labels apply to staff members too", () => {
+    expect(
+      decideResource(staff, { ...lab, labels: [{ system: V3_ACT_CODE, code: "PSY" }] }),
+    ).toMatchObject({ rule: 6, reason: "mental-health records are always private" });
+  });
+
+  it.each([
+    ["Maria Santos", "Maria"],
+    ["Dr. Grace Lee", "Dr. Lee"],
+    ["Dr Lee", "Dr Lee"],
+    ["Carlo647 Kory651 Blanda868", "Carlo647"],
+    ["Dr.", "Dr."],
+  ])("names %s as %s", (full, short) => {
+    expect(firstName(full)).toBe(short);
   });
 });
 

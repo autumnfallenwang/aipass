@@ -16,6 +16,13 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
+      // A scripted OpenAI-compatible model (S8): no test depends on a real one.
+      command: "pnpm exec tsx e2e/fake-model.ts",
+      url: `${E2E.model}/v1/models`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+    {
       command: "pnpm --filter @aipass/api start",
       cwd: root,
       url: `${E2E.api}/health`,

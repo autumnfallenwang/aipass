@@ -1,5 +1,5 @@
 import { agents, approvalRules, approvals, authSchema, type Db, persons, roles } from "@aipass/db";
-import { approvalChallenge } from "@aipass/fhir";
+import { approvalChallenge, type FhirClient, humanName, normaliseRef } from "@aipass/fhir";
 import { APPROVAL_WINDOW_SECONDS } from "@aipass/policy";
 import { GROUPS, rulesToPermissions } from "@aipass/shared";
 import {
@@ -33,8 +33,8 @@ type Env = { Variables: { userId: string } };
  * with a passkey assertion with user verification over a challenge that binds
  * this payload, this approval and a nonce.
  */
-export function approvalRoutes(deps: { db: Db; auth: Auth }) {
-  const { db, auth } = deps;
+export function approvalRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient }) {
+  const { db, auth, fhir } = deps;
   const origin = new URL(config.publicUrl);
   const app = new Hono<Env>();
 
@@ -76,6 +76,24 @@ export function approvalRoutes(deps: { db: Db; auth: Auth }) {
       .from(persons)
       .where(eq(persons.id, row.approval.personId));
     return { ...row, approver, forPerson };
+  }
+
+  /**
+   * Whose record the change goes into, when that's not the person the AI acts
+   * for: a staff member's change is to the patient they had open (S10).
+   */
+  async function patientOf(
+    a: typeof approvals.$inferSelect,
+    forPerson: { fhirRef: string } | undefined,
+  ): Promise<string | null> {
+    if (!forPerson?.fhirRef.startsWith("Practitioner/")) return null;
+    const subject = (a.payload as { subject?: { reference?: string } }).subject?.reference;
+    const ref = normaliseRef(subject);
+    if (!ref?.startsWith("Patient/")) return null;
+    const [known] = await db.select().from(persons).where(eq(persons.fhirRef, ref));
+    if (known) return known.displayName;
+    const p = await fhir.read("Patient", ref.slice("Patient/".length)).catch(() => null);
+    return (p && humanName(p)) ?? ref;
   }
 
   function stateOf(a: typeof approvals.$inferSelect): string {
@@ -154,6 +172,7 @@ export function approvalRoutes(deps: { db: Db; auth: Auth }) {
       id: a.id,
       agentName,
       forPerson: forPerson?.displayName,
+      patient: await patientOf(a, forPerson),
       approver: approver?.displayName,
       isApprover,
       hasPasskey: keys.length > 0,
@@ -307,7 +326,13 @@ export function adminApprovalRoutes(deps: { db: Db }) {
       .leftJoin(agents, eq(approvals.agentId, agents.id))
       .orderBy(desc(approvals.createdAt))
       .limit(50);
-    const people = await db.select().from(persons);
+    // Only the people these approvals name, not everyone (S9).
+    const ids = [
+      ...new Set(rows.flatMap((r) => [r.approval.personId, r.approval.approverPersonId])),
+    ];
+    const people = ids.length
+      ? await db.select().from(persons).where(inArray(persons.id, ids))
+      : [];
     const name = (id: string) => people.find((p) => p.id === id)?.displayName ?? id;
     return c.json(
       rows.map(({ approval: a, agentName }) => ({

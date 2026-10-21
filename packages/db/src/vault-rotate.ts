@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
+import { fhirAuthBind } from "./fhir.ts";
 import type { Db } from "./index.ts";
-import { fhirServers, vault } from "./schema.ts";
+import { chatLinks, fhirServers, modelConnections, vault } from "./schema.ts";
 import { seal, unseal } from "./vault.ts";
 
 export type RotationResult = { resealed: number; failed: string[] };
@@ -16,17 +17,60 @@ export async function rotateVault(db: Db, keys: Buffer[]): Promise<RotationResul
   const result: RotationResult = { resealed: 0, failed: [] };
 
   for (const s of await db.select().from(fhirServers)) {
-    if (!s.clientSecretSealed) continue;
-    const bind = `server|${s.id}`;
+    if (s.clientSecretSealed) {
+      const bind = `server|${s.id}`;
+      try {
+        const secret = unseal(keys, s.clientSecretSealed, bind);
+        await db
+          .update(fhirServers)
+          .set({ clientSecretSealed: seal(current, secret, bind) })
+          .where(eq(fhirServers.id, s.id));
+        result.resealed++;
+      } catch {
+        result.failed.push(`FHIR server ${s.id}: client secret`);
+      }
+    }
+    if (s.authHeaderSealed) {
+      const bind = fhirAuthBind(s.id);
+      try {
+        const header = unseal(keys, s.authHeaderSealed, bind);
+        await db
+          .update(fhirServers)
+          .set({ authHeaderSealed: seal(current, header, bind) })
+          .where(eq(fhirServers.id, s.id));
+        result.resealed++;
+      } catch {
+        result.failed.push(`FHIR server ${s.id}: aipass's credential`);
+      }
+    }
+  }
+
+  // S8: model keys and the built-in chat's tokens.
+  for (const m of await db.select().from(modelConnections)) {
+    if (!m.apiKeySealed) continue;
+    const bind = `model|${m.id}`;
     try {
-      const secret = unseal(keys, s.clientSecretSealed, bind);
+      const k = unseal(keys, m.apiKeySealed, bind);
       await db
-        .update(fhirServers)
-        .set({ clientSecretSealed: seal(current, secret, bind) })
-        .where(eq(fhirServers.id, s.id));
+        .update(modelConnections)
+        .set({ apiKeySealed: seal(current, k, bind) })
+        .where(eq(modelConnections.id, m.id));
       result.resealed++;
     } catch {
-      result.failed.push(`FHIR server ${s.id}: client secret`);
+      result.failed.push(`model connection ${m.id}: API key`);
+    }
+  }
+  for (const l of await db.select().from(chatLinks)) {
+    const bind = `chat|${l.userId}|${l.agentId}`;
+    try {
+      const t = unseal(keys, l.tokensSealed, bind);
+      await db
+        .update(chatLinks)
+        .set({ tokensSealed: seal(current, t, bind) })
+        .where(and(eq(chatLinks.userId, l.userId), eq(chatLinks.agentId, l.agentId)));
+      result.resealed++;
+    } catch {
+      result.failed.push(`built-in chat for ${l.userId} as ${l.agentId}`);
     }
   }
 

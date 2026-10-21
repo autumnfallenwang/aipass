@@ -4,6 +4,7 @@ import { CheckCircle2, ExternalLink, ShieldAlert, ShieldCheck } from "lucide-rea
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { PersonPicker } from "@/components/person-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -23,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { type Agent, api, type Person, type Receipt, useApi } from "@/lib/api";
+import { type Agent, api, type Receipt, useApi } from "@/lib/api";
 
 const ALL = "__all";
 
@@ -41,7 +42,6 @@ const RULES: Record<number, string> = {
 
 export default function ActivityPage() {
   const agents = useApi<Agent[]>("/admin/agents");
-  const persons = useApi<Person[]>("/admin/persons");
   const [agent, setAgent] = useState(ALL);
   const [person, setPerson] = useState(ALL);
   const [decision, setDecision] = useState(ALL);
@@ -101,19 +101,13 @@ export default function ActivityPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={person} onValueChange={setPerson}>
-          <SelectTrigger className="w-48" aria-label="Filter by person">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All people</SelectItem>
-            {(persons.data ?? []).map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.displayName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <PersonPicker
+          value={person}
+          onChange={setPerson}
+          label="Filter by person"
+          extra={[{ value: ALL, label: "All people" }]}
+          className="w-48"
+        />
         <Select value={decision} onValueChange={setDecision}>
           <SelectTrigger className="w-40" aria-label="Filter by decision">
             <SelectValue />
@@ -156,6 +150,11 @@ export default function ActivityPage() {
               </TableCell>
               <TableCell className="whitespace-normal">
                 {r.sentence}
+                {r.clientName && (
+                  <span className="ml-2 text-xs text-muted-foreground" data-testid="via-app">
+                    via {r.clientName}
+                  </span>
+                )}
                 {r.rule !== null && (
                   <span
                     className="ml-2 cursor-help text-xs text-muted-foreground underline decoration-dotted"

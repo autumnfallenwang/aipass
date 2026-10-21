@@ -1,25 +1,14 @@
 "use client";
 
-import { ACTION_TITLES, GROUP_TITLES, type Group, type Permission } from "@aipass/shared";
-import { KeyRound, Plus } from "lucide-react";
-import { type SubmitEvent, useState } from "react";
-import { toast } from "sonner";
-import { PageHeader } from "@/components/page-header";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { AddPerson } from "@/components/add-person";
+import { PageHeader, timeAgo } from "@/components/page-header";
+import { PersonPanel } from "@/components/person-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -27,284 +16,304 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type Agent, api, type Grant, type Person, type Role, useApi } from "@/lib/api";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { type Agent, type FhirServer, type PersonList, useApi } from "@/lib/api";
 
-function permTitle(p: Permission): string {
-  const [g, a] = p.split(":") as [Group, keyof typeof ACTION_TITLES];
-  return `${GROUP_TITLES[g]}${a === "read" ? "" : ` (${ACTION_TITLES[a].toLowerCase()})`}`;
+const ANY = "any";
+const KEYS = [
+  "q",
+  "server",
+  "login",
+  "agent",
+  "status",
+  "sort",
+  "page",
+  "limit",
+  "person",
+] as const;
+type Filters = Partial<Record<(typeof KEYS)[number], string>>;
+
+function readUrl(): Filters {
+  if (typeof window === "undefined") return {};
+  const q = new URLSearchParams(window.location.search);
+  return Object.fromEntries(KEYS.flatMap((k) => (q.get(k) ? [[k, q.get(k) as string]] : [])));
 }
 
-function AddPerson({ onDone }: { onDone: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ displayName: "", fhirRef: "Patient/" });
-  async function submit(e: SubmitEvent) {
-    e.preventDefault();
-    try {
-      await api("/admin/persons", { method: "POST", json: form });
-      setOpen(false);
-      onDone();
-    } catch (err) {
-      toast.error((err as Error).message);
-    }
-  }
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline">
-          <Plus /> Add test person
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <form onSubmit={submit} className="grid gap-4">
-          <DialogHeader>
-            <DialogTitle>Add a test person</DialogTitle>
-            <DialogDescription>
-              Synthetic data only. Link them to a Patient (or Practitioner) in the FHIR server.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <Label htmlFor="person-name">Name</Label>
-            <Input
-              id="person-name"
-              required
-              value={form.displayName}
-              onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="person-ref">FHIR reference</Label>
-            <Input
-              id="person-ref"
-              required
-              value={form.fhirRef}
-              onChange={(e) => setForm({ ...form, fhirRef: e.target.value })}
-            />
-          </div>
-          <DialogFooter>
-            <Button type="submit">Add</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function GiveLogin({ person, onDone }: { person: Person; onDone: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "" });
-  async function submit(e: SubmitEvent) {
-    e.preventDefault();
-    try {
-      await api(`/admin/persons/${person.id}/login`, { method: "POST", json: form });
-      toast.success(`${person.displayName} can now sign in, consent, and see "My AIs"`);
-      setOpen(false);
-      onDone();
-    } catch (err) {
-      toast.error((err as Error).message);
-    }
-  }
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <KeyRound /> Give a login
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <form onSubmit={submit} className="grid gap-4">
-          <DialogHeader>
-            <DialogTitle>A login for {person.displayName}</DialogTitle>
-            <DialogDescription>
-              With a login they decide what each AI may do for them, and can revoke it.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <Label htmlFor="login-email">Email</Label>
-            <Input
-              id="login-email"
-              type="email"
-              required
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="login-password">Temporary password</Label>
-            <Input
-              id="login-password"
-              type="password"
-              minLength={10}
-              required
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
-          </div>
-          <DialogFooter>
-            <Button type="submit">Create login</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function GrantRow(props: {
-  person: Person;
-  grant: Grant;
-  ceiling: Permission[];
-  onChange: () => void;
-}) {
-  const { person, grant, ceiling } = props;
-  const outside = grant.permissions.filter((p) => !ceiling.includes(p));
-
-  async function set(permissions: Permission[]) {
-    try {
-      await api(`/admin/persons/${person.id}/grants/${grant.agentId}`, {
-        method: "PUT",
-        json: { permissions },
-      });
-      props.onChange();
-    } catch (err) {
-      toast.error((err as Error).message);
-    }
-  }
-
-  async function status(verb: "revoke" | "restore") {
-    await api(`/admin/persons/${person.id}/grants/${grant.agentId}/${verb}`, { method: "POST" });
-    toast.success(
-      verb === "revoke"
-        ? `${grant.agentName} can no longer act for ${person.displayName}`
-        : "Restored",
-    );
-    props.onChange();
-  }
-
-  return (
-    <div className="rounded-lg border p-3" data-grant={`${person.id}:${grant.agentId}`}>
-      <div className="mb-2 flex items-center justify-between">
-        <div className="font-medium">{grant.agentName}</div>
-        <div className="flex items-center gap-2">
-          <Badge variant={grant.status === "active" ? "secondary" : "destructive"}>
-            {grant.status === "active" ? "Agreed" : "Revoked"}
-          </Badge>
-          {grant.status === "active" ? (
-            <Button size="sm" variant="destructive" onClick={() => status("revoke")}>
-              Revoke
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => status("restore")}>
-              Restore
-            </Button>
-          )}
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {ceiling.map((p) => (
-          <Label key={p} className="flex items-center gap-2 font-normal">
-            <Checkbox
-              disabled={grant.status !== "active"}
-              checked={grant.permissions.includes(p)}
-              onCheckedChange={(on) =>
-                set(on ? [...grant.permissions, p] : grant.permissions.filter((x) => x !== p))
-              }
-            />
-            {permTitle(p)}
-          </Label>
-        ))}
-        {ceiling.length === 0 && (
-          <span className="text-sm text-muted-foreground">
-            The agent&apos;s role allows nothing.
-          </span>
-        )}
-      </div>
-      {outside.length > 0 && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Also agreed, but outside the role (so never used): {outside.map(permTitle).join(", ")}
-        </p>
-      )}
-    </div>
-  );
-}
-
+/** People (S9): only the list. One person opens in a side panel. */
 export default function PeoplePage() {
-  const persons = useApi<Person[]>("/admin/persons");
-  const agents = useApi<Agent[]>("/admin/agents");
-  const roles = useApi<Role[]>("/admin/roles");
-  const ceilingOf = (agentId: string) => {
-    const roleId = agents.data?.find((a) => a.id === agentId)?.roleId;
-    return roles.data?.find((r) => r.id === roleId)?.permissions ?? [];
-  };
+  const router = useRouter();
+  const [f, setF] = useState<Filters | null>(null);
+  const [typed, setTyped] = useState("");
 
-  async function addGrant(person: Person, agentId: string) {
-    await api(`/admin/persons/${person.id}/grants/${agentId}`, {
-      method: "PUT",
-      json: { permissions: ceilingOf(agentId) },
-    });
-    await persons.reload();
+  // Filters live in the URL, so a view can be shared and reloaded.
+  useEffect(() => {
+    const start = readUrl();
+    setF(start);
+    setTyped(start.q ?? "");
+  }, []);
+
+  function update(next: Filters, resetPage = true) {
+    const merged = { ...f, ...next, ...(resetPage ? { page: undefined } : {}) };
+    const clean = Object.fromEntries(
+      Object.entries(merged).filter(([, v]) => v !== undefined && v !== "" && v !== ANY),
+    ) as Filters;
+    setF(clean);
+    router.replace(
+      `/admin/people${Object.keys(clean).length ? `?${new URLSearchParams(clean)}` : ""}`,
+      {
+        scroll: false,
+      },
+    );
   }
+
+  // Search a moment after they stop typing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the typed text changes
+  useEffect(() => {
+    if (!f || (f.q ?? "") === typed) return;
+    const t = setTimeout(() => update({ q: typed || undefined }), 300);
+    return () => clearTimeout(t);
+  }, [typed]);
+
+  const listQuery = f
+    ? new URLSearchParams(
+        Object.fromEntries(Object.entries(f).filter(([k]) => k !== "person")) as Record<
+          string,
+          string
+        >,
+      ).toString()
+    : null;
+  const list = useApi<PersonList>(listQuery === null ? null : `/admin/persons?${listQuery}`);
+  const servers = useApi<FhirServer[]>("/admin/fhir-servers");
+  const agents = useApi<Agent[]>("/admin/agents");
+
+  const page = Number(f?.page ?? 1);
+  const limit = Number(f?.limit ?? 25);
+  const total = list.data?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const filtered = Boolean(f?.q || f?.server || f?.login || f?.agent || f?.status);
+
+  const filter = (
+    key: "server" | "login" | "agent" | "status",
+    label: string,
+    options: { value: string; label: string }[],
+  ) => (
+    <Select value={f?.[key] ?? ANY} onValueChange={(v) => update({ [key]: v })}>
+      <SelectTrigger className="w-40" aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 
   return (
     <>
       <PageHeader
         title="People"
-        description="Who agents act for, and what each person agreed to. Until people sign in themselves (S3), the admin manages test persons here."
-        actions={<AddPerson onDone={persons.reload} />}
+        description="Everyone the agents may act for. Each person has their records at one or more FHIR servers, and decides themselves what each AI may do."
+        actions={
+          <AddPerson
+            onAdded={(id) => {
+              update({ person: id }, false);
+              void list.reload();
+            }}
+          />
+        }
       />
-      <div className="grid gap-4">
-        {(persons.data ?? []).map((p) => {
-          const without = (agents.data ?? []).filter(
-            (a) => !p.grants.some((g) => g.agentId === a.id),
-          );
-          return (
-            <Card key={p.id} data-person={p.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <CardTitle>{p.displayName}</CardTitle>
-                    <CardDescription className="font-mono">{p.fhirRef}</CardDescription>
-                  </div>
-                  {p.userId ? (
-                    <Badge variant="secondary">Has a login</Badge>
-                  ) : (
-                    <GiveLogin person={p} onDone={persons.reload} />
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                {p.grants.map((g) => (
-                  <GrantRow
-                    key={g.id}
-                    person={p}
-                    grant={g}
-                    ceiling={ceilingOf(g.agentId)}
-                    onChange={persons.reload}
-                  />
-                ))}
-                {p.grants.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No agent may act for this person.</p>
-                )}
-                {without.length > 0 && (
-                  <Select onValueChange={(agentId) => addGrant(p, agentId)} value="">
-                    <SelectTrigger
-                      className="w-64"
-                      aria-label={`Let an agent act for ${p.displayName}`}
-                    >
-                      <SelectValue placeholder="Let another agent act for them…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {without.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+      <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="people-filters">
+        <div className="relative">
+          <Search className="absolute top-2 left-2.5 size-4 text-muted-foreground" />
+          <Input
+            aria-label="Search people"
+            placeholder="Name, email or record id"
+            className="w-56 pl-8"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+          />
+        </div>
+        {filter("server", "Filter by server", [
+          { value: ANY, label: "All servers" },
+          ...(servers.data ?? []).map((s) => ({ value: s.id, label: s.name })),
+        ])}
+        {filter("login", "Filter by login", [
+          { value: ANY, label: "Login: any" },
+          { value: "yes", label: "Has a login" },
+          { value: "no", label: "No login" },
+        ])}
+        {filter("agent", "Filter by AI", [
+          { value: ANY, label: "Any AI" },
+          ...(agents.data ?? []).map((a) => ({ value: a.id, label: `Allowed: ${a.name}` })),
+        ])}
+        {filter("status", "Filter by status", [
+          { value: ANY, label: "Any status" },
+          { value: "active", label: "Active" },
+          { value: "suspended", label: "Paused" },
+        ])}
+        <Select value={f?.sort ?? "name"} onValueChange={(v) => update({ sort: v })}>
+          <SelectTrigger className="w-40" aria-label="Sort people">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name">Sort: name</SelectItem>
+            <SelectItem value="activity">Sort: last activity</SelectItem>
+            <SelectItem value="ais">Sort: most AIs</SelectItem>
+          </SelectContent>
+        </Select>
+        {filtered && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setTyped("");
+              update({
+                q: undefined,
+                server: undefined,
+                login: undefined,
+                agent: undefined,
+                status: undefined,
+              });
+            }}
+          >
+            <X /> Clear
+          </Button>
+        )}
       </div>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Records</TableHead>
+            <TableHead>Login</TableHead>
+            <TableHead>AIs</TableHead>
+            <TableHead>Last activity</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {(list.data?.items ?? []).map((p) => (
+            <TableRow
+              key={p.id}
+              data-person={p.id}
+              className="cursor-pointer"
+              onClick={() => update({ person: p.id }, false)}
+            >
+              <TableCell>
+                <button
+                  type="button"
+                  className="font-medium hover:underline"
+                  aria-label={`Open ${p.displayName}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    update({ person: p.id }, false);
+                  }}
+                >
+                  {p.displayName}
+                </button>
+                <span className="ml-2 inline-flex gap-1">
+                  {p.isTest && <Badge variant="outline">Test</Badge>}
+                  {p.status === "suspended" && <Badge variant="destructive">Paused</Badge>}
+                </span>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {p.records.map((r) => (
+                    <Badge
+                      key={`${r.serverId}:${r.ref}`}
+                      variant={r.linkedBy === "person" ? "secondary" : "outline"}
+                      title={r.ref}
+                    >
+                      {r.serverName}
+                    </Badge>
+                  ))}
+                </div>
+              </TableCell>
+              <TableCell className="text-sm">
+                {p.email ?? <span className="text-muted-foreground">No login</span>}
+              </TableCell>
+              <TableCell className="text-sm">
+                {p.ais.active} of {p.ais.total}
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">
+                {timeAgo(p.lastActivity)}
+              </TableCell>
+            </TableRow>
+          ))}
+          {list.data?.items.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} className="text-muted-foreground">
+                {filtered ? "No one matches." : "No people yet. Add someone from their record."}
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+
+      <div
+        className="mt-4 flex items-center justify-between gap-2 text-sm"
+        data-testid="people-paging"
+      >
+        <span className="text-muted-foreground">
+          {total === 0
+            ? "0 people"
+            : `${(page - 1) * limit + 1}–${Math.min(page * limit, total)} of ${total.toLocaleString()}`}
+        </span>
+        <div className="flex items-center gap-2">
+          <Select value={String(limit)} onValueChange={(v) => update({ limit: v })}>
+            <SelectTrigger className="w-32" aria-label="People per page" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["25", "50", "100"].map((n) => (
+                <SelectItem key={n} value={n}>
+                  {n} per page
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Previous page"
+            disabled={page <= 1}
+            onClick={() => update({ page: String(page - 1) }, false)}
+          >
+            <ChevronLeft />
+          </Button>
+          <span>
+            Page {page} of {pages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Next page"
+            disabled={page >= pages}
+            onClick={() => update({ page: String(page + 1) }, false)}
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+      </div>
+
+      {f?.person && (
+        <PersonPanel
+          key={f.person}
+          personId={f.person}
+          onClose={() => update({ person: undefined }, false)}
+          onChanged={list.reload}
+        />
+      )}
     </>
   );
 }

@@ -10,7 +10,13 @@ import {
   payloadHash,
   receiptSentence,
 } from "@aipass/fhir";
-import { APPROVAL_WINDOW_SECONDS, decideCommit, type Refuse, refuse } from "@aipass/policy";
+import {
+  APPROVAL_WINDOW_SECONDS,
+  decideCommit,
+  firstName,
+  type Refuse,
+  refuse,
+} from "@aipass/policy";
 import type { Group } from "@aipass/shared";
 import { and, eq } from "drizzle-orm";
 import type { Defect } from "./broken.ts";
@@ -126,12 +132,15 @@ export class Changes {
       decision: "allow",
       agentName: r.agentName,
       personName: r.person.name,
+      staff: r.staff,
+      patientName: r.patientName,
       action: "propose",
       group,
       count: 1,
-    })} Waiting for ${approverName.split(" ")[0]}'s OK: ${summary}.`;
+    })} Waiting for ${firstName(approverName)}'s OK: ${summary}.`;
     await this.deps.recorder.record({
       agent: { id: caller.agentId, name: r.agentName },
+      clientId: caller.clientId ?? null,
       person: r.person,
       patientRef: r.patientRef,
       passJti: caller.claims.jti,
@@ -287,6 +296,8 @@ export class Changes {
       decision: "allow",
       agentName: r.agentName,
       personName: r.person.name,
+      staff: r.staff,
+      patientName: r.patientName,
       action: "write",
       group,
       count: 1,
@@ -295,6 +306,7 @@ export class Changes {
       await this.deps.recorder.record(
         {
           agent: { id: caller.agentId, name: r.agentName },
+          clientId: caller.clientId ?? null,
           person: r.person,
           patientRef: r.patientRef,
           passJti: caller.claims.jti,
@@ -330,12 +342,15 @@ export class Changes {
       decision: "refuse",
       agentName: r.agentName,
       personName: r.person?.name ?? null,
+      staff: r.staff,
+      patientName: r.patientName,
       action,
       group,
       reason: v.reason,
     });
     await this.deps.recorder.record({
       agent: { id: caller.agentId, name: r.agentName },
+      clientId: caller.clientId ?? null,
       person: r.person,
       patientRef: r.patientRef,
       passJti: caller.claims.jti,

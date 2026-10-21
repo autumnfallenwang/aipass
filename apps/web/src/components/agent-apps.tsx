@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type Agent, api, useApi } from "@/lib/api";
+import { type Agent, api, CHAT_CLIENT_ID, useApi } from "@/lib/api";
 
 export const CLAUDE_CODE = "https://claude.ai/oauth/claude-code-client-metadata";
 
@@ -62,7 +62,8 @@ export function AgentAppsDialog({ agent, onClose }: { agent: Agent; onClose: () 
   }
 
   const notYet = (known.data ?? []).filter(
-    (k) => !(allowed.data ?? []).some((a) => a.clientId === k.clientId),
+    (k) =>
+      k.clientId !== CHAT_CLIENT_ID && !(allowed.data ?? []).some((a) => a.clientId === k.clientId),
   );
 
   return (
@@ -80,7 +81,11 @@ export function AgentAppsDialog({ agent, onClose }: { agent: Agent; onClose: () 
             <li key={a.clientId} className="flex items-center gap-2 rounded-md border p-2 text-sm">
               <div className="min-w-0 flex-1">
                 <div className="font-medium">
-                  {a.clientId === CLAUDE_CODE ? "Claude Code" : (a.name ?? "Unnamed app")}
+                  {a.clientId === CLAUDE_CODE
+                    ? "Claude Code"
+                    : a.clientId === CHAT_CLIENT_ID
+                      ? "aipass chat (built-in)"
+                      : (a.name ?? "Unnamed app")}
                 </div>
                 <div
                   className="truncate font-mono text-xs text-muted-foreground"
@@ -105,6 +110,15 @@ export function AgentAppsDialog({ agent, onClose }: { agent: Agent; onClose: () 
           )}
         </ul>
         <div className="grid gap-2">
+          {!(allowed.data ?? []).some((a) => a.clientId === CHAT_CLIENT_ID) && (
+            <Button
+              variant="outline"
+              className="justify-self-start"
+              onClick={() => allow(CHAT_CLIENT_ID)}
+            >
+              <Plus /> Allow the built-in chat
+            </Button>
+          )}
           {!(allowed.data ?? []).some((a) => a.clientId === CLAUDE_CODE) && (
             <Button
               variant="outline"

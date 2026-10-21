@@ -11,6 +11,7 @@ import * as z from "zod";
 import { adminRoutes } from "./admin.ts";
 import { approvalRoutes } from "./approvals.ts";
 import { type Auth, adminExists, CLIENT_IP_HEADER } from "./auth.ts";
+import { personChatRoutes } from "./chat.ts";
 import { config } from "./config.ts";
 import { publicConnectionRoutes } from "./connections.ts";
 import { personFhirRoutes } from "./fhir-servers.ts";
@@ -29,6 +30,12 @@ export type ApiDeps = {
   remoteAddr?: (c: Context) => string | undefined;
   /** How the api reaches the gateway (tests pass the gateway app's fetch). */
   fetch?: typeof fetch;
+  /** How the api reaches model endpoints (tests pass a fake model). */
+  modelFetch?: typeof fetch;
+  /** How the built-in chat reaches aipass's own token endpoint (tests pass this app's request). */
+  selfFetch?: typeof fetch;
+  /** Re-reads aipass's registered FHIR server now (after an edit on the admin page). */
+  onFhirServerChanged?: () => Promise<void>;
 };
 
 export function createApp(deps: ApiDeps) {
@@ -122,12 +129,33 @@ export function createApp(deps: ApiDeps) {
     return c.json({ id: u.id, name: u.name, email: u.email, role: u.role ?? "person" });
   });
 
-  app.route("/api/admin", adminRoutes({ db, auth, fhir: deps.fhir, fetch: deps.fetch }));
+  app.route(
+    "/api/admin",
+    adminRoutes({
+      db,
+      auth,
+      fhir: deps.fhir,
+      fetch: deps.fetch,
+      modelFetch: deps.modelFetch,
+      onFhirServerChanged: deps.onFhirServerChanged,
+    }),
+  );
   app.route("/api/connections", publicConnectionRoutes({ db }));
   app.route("/api/person/fhir", personFhirRoutes({ db, auth, fetch: deps.fetch }));
-  // approvals before the general person routes: both live under /api/person
-  app.route("/api/person/approvals", approvalRoutes({ db, auth }));
-  app.route("/api/person", personRoutes({ db, auth }));
+  // approvals and the chat before the general person routes: all live under /api/person
+  app.route("/api/person/approvals", approvalRoutes({ db, auth, fhir: deps.fhir }));
+  app.route(
+    "/api/person/chat",
+    personChatRoutes({
+      db,
+      auth,
+      fetch: deps.fetch,
+      fhir: deps.fhir,
+      modelFetch: deps.modelFetch,
+      selfFetch: deps.selfFetch,
+    }),
+  );
+  app.route("/api/person", personRoutes({ db, auth, fhir: deps.fhir }));
 
   // Dev passes (S1): only when AIPASS_DEV_PASSES=1, and only from this machine.
   app.post("/dev/passes", async (c) => {

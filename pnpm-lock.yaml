@@ -35,6 +35,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@aipass/chat':
+        specifier: workspace:*
+        version: link:../../packages/chat
       '@aipass/check':
         specifier: workspace:*
         version: link:../../packages/check
@@ -124,6 +127,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@aipass/chat':
+        specifier: workspace:*
+        version: link:../../packages/chat
       '@modelcontextprotocol/client':
         specifier: ^2.3.1
         version: 2.3.1
@@ -218,6 +224,15 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+
+  packages/chat:
+    dependencies:
+      '@modelcontextprotocol/client':
+        specifier: ^2.3.1
+        version: 2.3.1
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/check:
     dependencies:

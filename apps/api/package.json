@@ -14,6 +14,7 @@
     "auth:generate": "auth generate --config src/auth-cli.ts --output ../../packages/db/src/auth-schema.ts -y"
   },
   "dependencies": {
+    "@aipass/chat": "workspace:*",
     "@aipass/shared": "workspace:*",
     "@hono/node-server": "^2.1.5",
     "hono": "^4.13.13",

@@ -21,16 +21,36 @@ export type FhirClientOptions = {
 
 /** A small FHIR REST client. It only talks to `baseUrl`. */
 export class FhirClient {
-  readonly baseUrl: string;
-  private readonly headers: Record<string, string>;
+  private base: string;
+  private headers: Record<string, string>;
   private readonly doFetch: typeof fetch;
   private readonly timeoutMs: number;
 
   constructor(opts: FhirClientOptions) {
-    this.baseUrl = opts.baseUrl.replace(/\/$/, "");
+    this.base = opts.baseUrl.replace(/\/$/, "");
     this.headers = { accept: "application/fhir+json", ...opts.headers };
     this.doFetch = opts.fetch ?? fetch;
     this.timeoutMs = opts.timeoutMs ?? 15_000;
+  }
+
+  get baseUrl(): string {
+    return this.base;
+  }
+
+  /**
+   * Points this client at another server, or another credential, from the next
+   * request on: aipass's own FHIR server is registered in the admin UI, and an
+   * edit there reaches running services without a restart.
+   */
+  repoint(t: { baseUrl: string; headers?: Record<string, string> }): void {
+    this.base = t.baseUrl.replace(/\/$/, "");
+    this.headers = { accept: "application/fhir+json", ...t.headers };
+  }
+
+  /** The credential headers it sends (for the health check, which reads the audit log). */
+  credentialHeaders(): Record<string, string> {
+    const { accept: _accept, ...rest } = this.headers;
+    return rest;
   }
 
   /** True when `url` points at this server (used to vet paging links). */

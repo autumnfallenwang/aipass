@@ -3,6 +3,7 @@ import { agentDeviceId, rulesToPermissions } from "@aipass/shared";
 import { inArray } from "drizzle-orm";
 import { newId } from "./ids.ts";
 import type { Db } from "./index.ts";
+import { CHAT_CLIENT_ID } from "./oauth.ts";
 import { agentClients, agents, grants, persons, roles } from "./schema.ts";
 
 const rule = (
@@ -20,7 +21,7 @@ const rule = (
 /** Claude Code's Client ID Metadata Document URL: the same for every install. */
 export const CLAUDE_CODE_CLIENT_ID = "https://claude.ai/oauth/claude-code-client-metadata";
 
-/** The Maria demo, used by every stage. */
+/** The Maria demo, used by every stage, and Dr. Lee's (S10). */
 export const DEMO = {
   roles: [
     {
@@ -45,6 +46,20 @@ export const DEMO = {
       rules: [rule("appointments", true), rule("demographics", true)],
       patientFields: ["name", "phone"] as PatientField[],
     },
+    {
+      id: "visit-assistant",
+      name: "Visit Assistant",
+      description:
+        "Helps a clinician during a visit, for the patient they have open: labs, conditions, medications, visit notes, and name, birth date and sex. May propose a reading.",
+      rules: [
+        rule("labs", true, true),
+        rule("conditions", true),
+        rule("medications", true),
+        rule("notes", true),
+        rule("demographics", true),
+      ],
+      patientFields: ["name", "birthDate", "gender"] as PatientField[],
+    },
   ],
   agents: [
     {
@@ -59,17 +74,25 @@ export const DEMO = {
       description: "An AI that books and reminds about appointments.",
       roleId: "scheduling-assistant",
     },
+    {
+      id: "visit-assistant",
+      name: "Visit Assistant",
+      description: "An AI that helps a clinician with the patient they have open.",
+      roleId: "visit-assistant",
+    },
   ],
   persons: [
-    { id: "maria", displayName: "Maria Santos", fhirRef: "Patient/maria" },
-    { id: "john", displayName: "John Carter", fhirRef: "Patient/john" },
+    // Synthetic: test persons, the only kind whose grants the admin may set (D19).
+    { id: "maria", displayName: "Maria Santos", fhirRef: "Patient/maria", isTest: true },
+    { id: "john", displayName: "John Carter", fhirRef: "Patient/john", isTest: true },
+    // A staff member (S10): her care team is in fixtures/staff/lee.json.
+    { id: "lee", displayName: "Dr. Grace Lee", fhirRef: "Practitioner/lee", isTest: true },
   ],
 };
 
 export function demoGrants(): { personId: string; agentId: string; permissions: Permission[] }[] {
-  const coach = DEMO.roles[0];
-  const scheduling = DEMO.roles[1];
-  if (!coach || !scheduling) throw new Error("demo roles missing");
+  const [coach, scheduling, visit] = DEMO.roles;
+  if (!coach || !scheduling || !visit) throw new Error("demo roles missing");
   return [
     { personId: "maria", agentId: "diabetes-coach", permissions: rulesToPermissions(coach.rules) },
     {
@@ -78,6 +101,7 @@ export function demoGrants(): { personId: string; agentId: string; permissions: 
       permissions: rulesToPermissions(scheduling.rules),
     },
     { personId: "john", agentId: "diabetes-coach", permissions: ["labs:read"] },
+    { personId: "lee", agentId: "visit-assistant", permissions: rulesToPermissions(visit.rules) },
   ];
 }
 
@@ -124,13 +148,35 @@ export async function seedDemo(db: Db, opts: { reset?: boolean } = {}): Promise<
     )
     .onConflictDoNothing();
   await db.insert(persons).values(DEMO.persons).onConflictDoNothing();
-  // The demo lets Claude Code connect as either agent.
+  // Installs seeded before S9 have them as ordinary people; they're synthetic.
+  await db
+    .update(persons)
+    .set({ isTest: true })
+    .where(
+      inArray(
+        persons.id,
+        DEMO.persons.map((p) => p.id),
+      ),
+    );
+  // The demo lets Claude Code and the built-in chat (S8) connect as either agent.
   await db
     .insert(agentClients)
-    .values(DEMO.agents.map((a) => ({ agentId: a.id, clientId: CLAUDE_CODE_CLIENT_ID })))
+    .values(
+      DEMO.agents.flatMap((a) => [
+        { agentId: a.id, clientId: CLAUDE_CODE_CLIENT_ID },
+        { agentId: a.id, clientId: CHAT_CLIENT_ID },
+      ]),
+    )
     .onConflictDoNothing();
   await db
     .insert(grants)
-    .values(demoGrants().map((g) => ({ ...g, id: newId("grt"), status: "active" as const })))
+    .values(
+      demoGrants().map((g) => ({
+        ...g,
+        id: newId("grt"),
+        status: "active" as const,
+        setBy: "admin" as const,
+      })),
+    )
     .onConflictDoNothing();
 }

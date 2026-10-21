@@ -10,6 +10,7 @@ import {
   LogOut,
   Server,
   ShieldCheck,
+  Sparkles,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +29,7 @@ const NAV = [
   { href: "/admin/approvals", label: "Approvals", icon: Fingerprint },
   { href: "/admin/connections", label: "Connections", icon: Link2 },
   { href: "/admin/fhir-servers", label: "FHIR servers", icon: Server },
+  { href: "/admin/ai-models", label: "AI models", icon: Sparkles },
   { href: "/admin/activity", label: "Activity", icon: Activity },
   { href: "/admin/health", label: "Health check", icon: HeartPulse },
 ];
@@ -63,7 +65,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="grid min-h-screen grid-cols-[220px_1fr]">
-      <aside className="flex flex-col gap-1 border-r bg-muted/30 p-4">
+      {/* Pinned to the window: long pages scroll, the navigation and sign-out stay put. */}
+      <aside className="sticky top-0 flex h-screen flex-col gap-1 overflow-y-auto border-r bg-muted/30 p-4">
         <Link href="/admin/agents" className="mb-6 px-2 text-lg font-semibold tracking-tight">
           aipass
           <span className="ml-2 align-middle text-xs font-normal text-muted-foreground">admin</span>

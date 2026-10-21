@@ -1,7 +1,7 @@
 "use client";
 
 import type { Permission } from "@aipass/shared";
-import { Lock, ShieldCheck } from "lucide-react";
+import { Lock, ShieldCheck, Stethoscope } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ type Context = {
   orgName: string;
   agent: { id: string; name: string; description: string | null; status: string; roleName: string };
   client: { id: string; name: string; approved: boolean };
-  person: { displayName: string } | null;
+  person: { displayName: string; staff: boolean } | null;
   ceiling: Permission[];
   granted: Permission[] | null;
 };
@@ -138,6 +138,17 @@ export default function ConsentPage() {
                       do; you can only allow less.
                     </p>
                   </div>
+                  {ctx.person?.staff && (
+                    <p
+                      className="flex gap-2 rounded-md border p-3 text-sm"
+                      data-testid="staff-note"
+                    >
+                      <Stethoscope className="mt-0.5 size-4 shrink-0" />
+                      It works on the patient you have open, and only while that patient is in your
+                      care at {ctx.orgName}&apos;s record system. You choose the patient in the chat
+                      or on My AIs.
+                    </p>
+                  )}
                   <p className="flex gap-2 rounded-md bg-muted p-3 text-sm">
                     <Lock className="mt-0.5 size-4 shrink-0" />
                     It will never see mental-health, substance-use, HIV-related or restricted

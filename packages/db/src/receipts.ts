@@ -36,6 +36,8 @@ function hashInput(r: Omit<typeof receipts.$inferSelect, "seq" | "hash">): strin
     r.mode,
     r.auditEventId,
     r.prevHash,
+    // Added in S8: only when present, so receipts written before still verify.
+    ...(r.clientId ? [r.clientId] : []),
   ]);
 }
 
@@ -74,6 +76,7 @@ export async function appendReceipt(db: Db, input: NewReceipt) {
       passJti: input.passJti ?? null,
       mode: input.mode ?? "live",
       auditEventId: input.auditEventId ?? null,
+      clientId: input.clientId ?? null,
       prevHash: last?.hash ?? GENESIS_HASH,
     };
     const hash = receiptHash(row);

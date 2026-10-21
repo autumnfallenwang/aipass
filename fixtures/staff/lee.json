@@ -1,0 +1,139 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Practitioner",
+        "id": "lee",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://aipass.dev/fixture",
+              "code": "synthetic"
+            }
+          ]
+        },
+        "identifier": [
+          {
+            "system": "https://sunrise-clinic.example/staff",
+            "value": "SC-STAFF-0042"
+          }
+        ],
+        "active": true,
+        "name": [
+          {
+            "use": "official",
+            "family": "Lee",
+            "given": ["Grace"],
+            "prefix": ["Dr."]
+          }
+        ],
+        "telecom": [
+          {
+            "system": "email",
+            "value": "lee@example.org",
+            "use": "work"
+          }
+        ],
+        "qualification": [
+          {
+            "code": {
+              "text": "Doctor of Medicine (MD)"
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Practitioner/lee"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CareTeam",
+        "id": "lee-maria",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://aipass.dev/fixture",
+              "code": "synthetic"
+            }
+          ]
+        },
+        "status": "active",
+        "name": "Dr. Lee's care of Maria Santos",
+        "subject": {
+          "reference": "Patient/maria",
+          "display": "Maria Santos"
+        },
+        "participant": [
+          {
+            "role": [
+              {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "446050000",
+                    "display": "Primary care physician"
+                  }
+                ]
+              }
+            ],
+            "member": {
+              "reference": "Practitioner/lee",
+              "display": "Dr. Grace Lee"
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "CareTeam/lee-maria"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CareTeam",
+        "id": "lee-carlo",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://aipass.dev/fixture",
+              "code": "synthetic"
+            }
+          ]
+        },
+        "status": "active",
+        "name": "Dr. Lee's care of Carlo647 Kory651 Blanda868",
+        "subject": {
+          "reference": "Patient/b4900f5e-1c24-1150-fd26-6fbc83da8893",
+          "display": "Carlo647 Kory651 Blanda868"
+        },
+        "participant": [
+          {
+            "role": [
+              {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "446050000",
+                    "display": "Primary care physician"
+                  }
+                ]
+              }
+            ],
+            "member": {
+              "reference": "Practitioner/lee",
+              "display": "Dr. Grace Lee"
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "CareTeam/lee-carlo"
+      }
+    }
+  ]
+}

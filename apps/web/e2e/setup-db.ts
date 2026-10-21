@@ -2,7 +2,15 @@
  * Puts the end-to-end database in a known state: migrated, emptied, then the
  * Maria demo seeded (no users, so the first sign-up becomes the admin).
  */
-import { createDb, DEMO, runMigrations, seedDemo, syncOAuth } from "@aipass/db";
+import {
+  createDb,
+  DEMO,
+  ensureAipassFhirServer,
+  ensureChatClient,
+  runMigrations,
+  seedDemo,
+  syncOAuth,
+} from "@aipass/db";
 import { buildDevice, FhirClient } from "@aipass/fhir";
 import postgres from "postgres";
 
@@ -24,11 +32,19 @@ await client.unsafe(
   `truncate table receipts, grants, agent_clients, agents, roles, persons, passkey, verification, account, session,
    oauth_client_resource, oauth_refresh_token, oauth_access_token, oauth_consent, oauth_client_assertion,
    oauth_client, oauth_resource, jwks, connections, sso_provider, vault, smart_launches, fhir_servers,
-   "user" restart identity cascade`,
+   chat_links, chat_launches, model_connections, patient_contexts, "user" restart identity cascade`,
 );
 await seedDemo(db);
 // The api syncs this on startup too, but Playwright starts it before this reset.
 await syncOAuth(db, process.env.GATEWAY_URL ?? "http://localhost:4002");
+await ensureAipassFhirServer(db, {
+  baseUrl: process.env.FHIR_BASE_URL ?? "http://127.0.0.1:8080/fhir",
+});
+await ensureChatClient(
+  db,
+  process.env.GATEWAY_URL ?? "http://localhost:4002",
+  process.env.PUBLIC_URL ?? "http://localhost:4000",
+);
 await close();
 
 const fhir = new FhirClient({ baseUrl: process.env.FHIR_BASE_URL ?? "http://127.0.0.1:8080/fhir" });

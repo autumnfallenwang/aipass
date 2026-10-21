@@ -43,6 +43,34 @@
       "when": 1792468533738,
       "tag": "0005_condemned_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792561670736,
+      "tag": "0006_s8_chat_models",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792564936410,
+      "tag": "0007_fhir_servers_registered",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792566428063,
+      "tag": "0008_people_at_scale",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792593534916,
+      "tag": "0009_staff_patient_context",
+      "breakpoints": true
     }
   ]
 }

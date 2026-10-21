@@ -6,6 +6,7 @@ export {
   buildDevice,
   buildProvenance,
 } from "./audit.ts";
+export { type CarePatient, careTeamOf, humanName } from "./care.ts";
 export { FhirClient, type FhirClientOptions, FhirError } from "./client.ts";
 export { normaliseRef, patientRefsOf } from "./compartment.ts";
 export { loadFixtures } from "./fixtures.ts";

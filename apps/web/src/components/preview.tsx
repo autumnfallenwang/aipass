@@ -3,6 +3,7 @@
 import { GROUP_TITLES } from "@aipass/shared";
 import { EyeOff, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
+import { PersonPicker } from "@/components/person-picker";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -12,14 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { api, type Person, type Preview, type PreviewGroup, useApi } from "@/lib/api";
+import { api, type PersonList, type Preview, type PreviewGroup } from "@/lib/api";
 
 export type PreviewTarget = { roleId: string } | { agentId: string };
 
@@ -82,7 +76,6 @@ function GroupCard({ g }: { g: PreviewGroup }) {
 
 /** Choose a test person, see their chart exactly as the agent (or role) would. */
 export function PreviewPanel({ target }: { target: PreviewTarget }) {
-  const persons = useApi<Person[]>("/admin/persons");
   const [personId, setPersonId] = useState<string>("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,9 +83,11 @@ export function PreviewPanel({ target }: { target: PreviewTarget }) {
 
   useEffect(() => {
     // Start with the person the most agents act for (in the demo, Maria).
-    const first = [...(persons.data ?? [])].sort((a, b) => b.grants.length - a.grants.length)[0];
-    if (!personId && first) setPersonId(first.id);
-  }, [persons.data, personId]);
+    if (personId) return;
+    api<PersonList>("/admin/persons?sort=ais&limit=1")
+      .then((r) => r.items[0] && setPersonId(r.items[0].id))
+      .catch(() => {});
+  }, [personId]);
 
   useEffect(() => {
     if (!personId) return;
@@ -107,18 +102,7 @@ export function PreviewPanel({ target }: { target: PreviewTarget }) {
     <div className="grid gap-3">
       <div className="flex items-center gap-2">
         <Label>Test person</Label>
-        <Select value={personId} onValueChange={setPersonId}>
-          <SelectTrigger className="w-56" aria-label="Test person">
-            <SelectValue placeholder="Choose a person" />
-          </SelectTrigger>
-          <SelectContent>
-            {(persons.data ?? []).map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.displayName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <PersonPicker value={personId} onChange={setPersonId} label="Test person" />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!preview && !error && <p className="text-sm text-muted-foreground">Loading the chart…</p>}

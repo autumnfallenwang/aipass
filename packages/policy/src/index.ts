@@ -6,7 +6,8 @@
  *   2. the agent is active
  *   3. the role permits group + action
  *   4. the person's grant permits it
- *   5. the resource is in the person's patient compartment
+ *   5. the resource is in the person's patient compartment (for a staff
+ *      member: the patient they have open, who is in their care — S10)
  *   6. no locked label on the resource
  *   7. (writes) a matching, unused approval exists        — see decideCommit
  *
@@ -16,6 +17,7 @@
 import {
   type Action,
   type AgentStatus,
+  firstName,
   GROUP_LABELS,
   type GrantStatus,
   type Group,
@@ -23,6 +25,7 @@ import {
   LOCKED_LABELS,
   type LockedLabel,
   type Permission,
+  type PersonStatus,
   permission,
 } from "@aipass/shared";
 
@@ -34,12 +37,15 @@ export type RefusalCode =
   | "role_missing"
   | "role_denies"
   | "person_unknown"
+  | "person_suspended"
   | "grant_missing"
   | "grant_revoked"
   | "grant_denies"
   | "outside_request"
   | "unknown_record_type"
   | "not_in_compartment"
+  | "not_in_care"
+  | "context_changed"
   | "locked_label"
   | "unknown_label"
   | "approval_missing"
@@ -66,9 +72,8 @@ export function refuse(rule: Rule, code: RefusalCode, reason: string): Refuse {
   return { decision: "refuse", rule, code, reason };
 }
 
-export function firstName(displayName: string): string {
-  return displayName.trim().split(/\s+/)[0] || displayName;
-}
+/** The name a sentence uses: the first name, or a title and surname ("Dr. Lee"). */
+export { firstName };
 
 export type PassCheck = { ok: true } | { ok: false; error: string };
 
@@ -81,7 +86,8 @@ export type RequestContext = {
    */
   client?: { id: string; approved: boolean } | null;
   role: { name: string; permissions: readonly Permission[] } | null;
-  person: { id: string; displayName: string } | null;
+  /** `status` absent means active (callers before S9). */
+  person: { id: string; displayName: string; status?: PersonStatus } | null;
   grant: { status: GrantStatus; permissions: readonly Permission[] } | null;
   request: { group: Group; action: Action };
 };
@@ -107,6 +113,9 @@ export function decideRequest(ctx: RequestContext): Verdict {
 
   if (!ctx.person) return refuse(4, "person_unknown", "unknown person");
   const who = firstName(ctx.person.displayName);
+  if (ctx.person.status === "suspended") {
+    return refuse(4, "person_suspended", `${who}'s access is paused by the clinic`);
+  }
   if (!ctx.grant)
     return refuse(4, "grant_missing", `${who} hasn't agreed to ${verb(action)}${label}`);
   if (ctx.grant.status !== "active") {
@@ -138,6 +147,8 @@ export type ResourceContext = {
   person: { displayName: string };
   /** The patient the pass is pinned to, as `Patient/<id>`. */
   patientRef: string;
+  /** The person is a staff member, and `patientRef` is the patient they have open (S10). */
+  staff?: boolean;
   /** The group the request asked for. */
   requestGroup: Group;
 };
@@ -168,7 +179,13 @@ export function decideResource(ctx: ResourceContext, facts: ResourceFacts): Verd
 
   const refs = facts.patientRefs;
   if (refs.length === 0 || refs.some((r) => r !== ctx.patientRef)) {
-    return refuse(5, "not_in_compartment", `not ${firstName(ctx.person.displayName)}'s record`);
+    return refuse(
+      5,
+      "not_in_compartment",
+      ctx.staff
+        ? "not the patient in context"
+        : `not ${firstName(ctx.person.displayName)}'s record`,
+    );
   }
 
   for (const label of facts.labels) {

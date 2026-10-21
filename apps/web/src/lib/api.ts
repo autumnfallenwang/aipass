@@ -80,6 +80,11 @@ export type Agent = {
   status: "active" | "stopped";
   /** Where its records live; null for aipass's own FHIR server (S6). */
   fhirServerId: string | null;
+  /** The built-in chat's model, and a fallback (S8). */
+  modelConnectionId: string | null;
+  model: string | null;
+  fallbackConnectionId: string | null;
+  fallbackModel: string | null;
   mcpUrl: string;
   lastActivity: string | null;
   createdAt: string;
@@ -92,6 +97,8 @@ export type Role = {
   rules: RoleRule[];
   patientFields: PatientField[];
   permissions: Permission[];
+  /** Its agents may only use models that keep data on the network (S8). */
+  networkModelsOnly: boolean;
   agentCount?: number;
 };
 
@@ -102,16 +109,55 @@ export type Grant = {
   agentName: string;
   permissions: Permission[];
   status: "active" | "revoked";
+  /** Who said yes (D19): the person, or the admin for a test person. */
+  setBy: "person" | "admin";
   grantedAt: string;
   revokedAt: string | null;
 };
 
-export type Person = {
+/** One of a person's records, at a FHIR server (S9). */
+export type PersonRecord = {
+  serverId: string;
+  serverName: string;
+  ref: string;
+  /** "admin": picked from a search of aipass's own server; "person": they connected it (SMART). */
+  linkedBy: "admin" | "person";
+  kind?: "aipass" | "smart";
+  linkedAt?: string;
+};
+
+/** A row of the People list (S9). */
+export type PersonRow = {
   id: string;
   displayName: string;
-  fhirRef: string;
-  userId: string | null;
-  grants: Grant[];
+  status: "active" | "suspended";
+  isTest: boolean;
+  email: string | null;
+  records: PersonRecord[];
+  ais: { active: number; total: number };
+  lastActivity: string | null;
+};
+
+export type PersonList = { total: number; page: number; limit: number; items: PersonRow[] };
+
+/** One person, for their side panel (S9). */
+export type PersonDetail = {
+  id: string;
+  displayName: string;
+  status: "active" | "suspended";
+  isTest: boolean;
+  createdAt: string;
+  login: { email: string; createdAt: string; passkeys: number } | null;
+  records: PersonRecord[];
+  grants: (Grant & { ceiling: Permission[] })[];
+  approvals: {
+    id: string;
+    agentName: string | null;
+    summary: string;
+    forThem: boolean;
+    createdAt: string;
+    expiresAt: string;
+  }[];
 };
 
 export type Receipt = {
@@ -132,6 +178,9 @@ export type Receipt = {
   mode: "live" | "preview";
   auditEventId: string | null;
   auditEventUrl: string | null;
+  /** The AI app that made the request (S8), when it held an OAuth pass. */
+  clientId: string | null;
+  clientName: string | null;
 };
 
 export type PreviewGroup =
@@ -145,12 +194,63 @@ export type PreviewGroup =
 
 export type Preview = { agentId: string; personId: string; groups: PreviewGroup[] };
 
+/** A FHIR server aipass uses (D18): its own (`aipass`), or an EHR over SMART (S6). */
 export type FhirServer = {
+  id: string;
+  kind: "aipass" | "smart";
+  name: string;
+  baseUrl: string;
+  /** SMART servers only. */
+  clientId: string | null;
+  scope: string | null;
+  confidential: boolean;
+  /** aipass's own server: whether aipass signs in with a credential of its own. */
+  hasCredential: boolean;
+  enabled: boolean;
+};
+
+export type FhirTest =
+  | {
+      ok: true;
+      fhirVersion: string | null;
+      software: string | null;
+      ms: number;
+      patients: number | null;
+      smart: boolean | null;
+    }
+  | { ok: false; error: string };
+
+export type DataLocation = "network" | "cloud";
+
+/** An OpenAI-compatible model endpoint (S8). The key never comes back, only whether there is one. */
+export type ModelConnection = {
   id: string;
   name: string;
   baseUrl: string;
-  clientId: string;
-  confidential: boolean;
-  scope: string;
+  hasKey: boolean;
+  dataLocation: DataLocation;
   enabled: boolean;
+  usedBy: string[];
+};
+
+export type ProbeResult = {
+  models: string[];
+  toolCall: { model: string; ok: boolean; detail: string; ms: number } | null;
+};
+
+export const DATA_WORDS: Record<DataLocation, string> = {
+  network: "Stays on your network",
+  cloud: "Goes to a cloud provider",
+};
+
+/** The built-in chat's OAuth client id (S8). */
+export const CHAT_CLIENT_ID = "aipass-chat";
+
+/** A patient a staff member has open with one AI (S10). */
+export type OpenPatientRef = { ref: string; name: string | null };
+
+/** A staff member's care team, from the record system (S10). */
+export type CareTeam = {
+  staff: boolean;
+  patients: { ref: string; name: string | null; birthDate: string | null; gender: string | null }[];
 };

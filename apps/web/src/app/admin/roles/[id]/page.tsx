@@ -33,6 +33,7 @@ type Draft = {
   description: string;
   rules: RoleRule[];
   patientFields: PatientField[];
+  networkModelsOnly: boolean;
 };
 
 function ruleFor(rules: RoleRule[], group: Group): RoleRule {
@@ -55,6 +56,7 @@ export default function RoleEditor() {
         description: role.data.description ?? "",
         rules: role.data.rules,
         patientFields: role.data.patientFields,
+        networkModelsOnly: role.data.networkModelsOnly,
       });
     }
   }, [role.data, draft]);
@@ -220,6 +222,26 @@ export default function RoleEditor() {
                   {PATIENT_FIELD_TITLES[f]}
                 </Label>
               ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Which models it may use</CardTitle>
+              <CardDescription>
+                The built-in chat sends what the AI reads to its model. Choosing a model is choosing
+                where a person&apos;s records go.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Label className="flex items-center gap-2 font-normal">
+                <Switch
+                  aria-label="Only models that keep data on your network"
+                  checked={draft.networkModelsOnly}
+                  onCheckedChange={(on) => setDraft({ ...draft, networkModelsOnly: on })}
+                />
+                Only models that keep data on your network
+              </Label>
             </CardContent>
           </Card>
         </div>

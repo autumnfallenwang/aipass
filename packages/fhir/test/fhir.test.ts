@@ -5,6 +5,7 @@ import {
   buildAuditEvent,
   buildDevice,
   buildProvenance,
+  careTeamOf,
   FhirClient,
   groupOf,
   labelsOf,
@@ -188,6 +189,76 @@ describe("receipt sentences", () => {
   });
 });
 
+describe("staff members (S10)", () => {
+  it("receipts name the clinician the AI acted for, and the patient", () => {
+    const base = { agentName: "Visit Assistant", personName: "Dr. Grace Lee", staff: true };
+    expect(
+      receiptSentence({
+        ...base,
+        patientName: "Maria Santos",
+        decision: "allow",
+        action: "read",
+        group: "labs",
+        count: 3,
+      }),
+    ).toBe("Visit Assistant read 3 lab results for Dr. Grace Lee (patient: Maria Santos).");
+    expect(
+      receiptSentence({
+        ...base,
+        patientName: null,
+        decision: "refuse",
+        action: "read",
+        group: "labs",
+        reason: "not one of Dr. Lee's patients",
+      }),
+    ).toBe(
+      "REFUSED: Visit Assistant tried to read lab results for Dr. Grace Lee: not one of Dr. Lee's patients.",
+    );
+  });
+
+  it("a care team counts only if it's active and names the clinician", async () => {
+    const team = (id: string, patient: string, member: string, status = "active") => ({
+      resource: {
+        resourceType: "CareTeam",
+        id,
+        status,
+        subject: { reference: patient },
+        participant: [{ member: { reference: member } }],
+      },
+    });
+    const answer = {
+      resourceType: "Bundle",
+      entry: [
+        team("a", "Patient/maria", "Practitioner/lee"),
+        team("b", "Patient/john", "Practitioner/someone-else"),
+        team("c", "Patient/carlo", "Practitioner/lee", "inactive"),
+        team("d", "Group/ward-3", "Practitioner/lee"),
+        {
+          resource: {
+            resourceType: "Patient",
+            id: "maria",
+            name: [{ given: ["Maria"], family: "Santos" }],
+            birthDate: "1971-03-14",
+          },
+        },
+      ],
+    };
+    let asked = "";
+    const fhir = new FhirClient({
+      baseUrl: "http://fhir.test/fhir",
+      fetch: async (url) => {
+        asked = String(url);
+        return new Response(JSON.stringify(answer), { status: 200 });
+      },
+    });
+    expect(await careTeamOf(fhir, "Practitioner/lee")).toEqual([
+      { ref: "Patient/maria", name: "Maria Santos", birthDate: "1971-03-14", gender: null },
+    ]);
+    expect(asked).toContain("participant=Practitioner%2Flee");
+    expect(asked).toContain("status=active");
+  });
+});
+
 describe("FHIR builders", () => {
   it("builds the agent's Device", () => {
     const d = buildDevice({ id: "diabetes-coach", name: "Diabetes Coach", status: "active" });
@@ -252,5 +323,34 @@ describe("FhirClient", () => {
     expect(c.owns("http://fhir.local/fhirx/Patient")).toBe(false);
     expect(c.owns("http://evil.example/fhir?_getpages=x")).toBe(false);
     await expect(c.page("http://evil.example/fhir?_getpages=x")).rejects.toThrow(/outside/);
+  });
+});
+
+describe("FhirClient.repoint", () => {
+  it("sends the next request to the new server, with the new credential", async () => {
+    const seen: { url: string; auth: string | null }[] = [];
+    const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init?.headers).get("authorization"),
+      });
+      return new Response(JSON.stringify({ resourceType: "Patient", id: "p" }), { status: 200 });
+    }) as typeof fetch;
+    const c = new FhirClient({
+      baseUrl: "http://one.example/fhir",
+      headers: { authorization: "Bearer one" },
+      fetch: fetchFn,
+    });
+    await c.read("Patient", "p");
+    c.repoint({ baseUrl: "http://two.example/fhir/", headers: { authorization: "Bearer two" } });
+    await c.read("Patient", "p");
+    expect(seen).toEqual([
+      { url: "http://one.example/fhir/Patient/p", auth: "Bearer one" },
+      { url: "http://two.example/fhir/Patient/p", auth: "Bearer two" },
+    ]);
+    expect(c.baseUrl).toBe("http://two.example/fhir");
+    expect(c.credentialHeaders()).toEqual({ authorization: "Bearer two" });
+    // It only talks to the server it points at now.
+    expect(c.owns("http://one.example/fhir/Patient/p")).toBe(false);
   });
 });

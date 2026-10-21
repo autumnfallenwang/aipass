@@ -6,7 +6,8 @@ import type { Changes } from "./changes.ts";
 import type { Caller, Guard, ReadOutcome, ReadRequest } from "./guard.ts";
 
 const INSTRUCTIONS = `You are connected to a patient's health record through aipass.
-Every call is checked against what the clinic allows this AI to do and what the patient agreed to.
+You act for one person: the patient, or a staff member working on the patient they have open.
+Every call is checked against what the clinic allows this AI to do and what that person agreed to.
 Some records are always private (mental health, substance use, HIV, restricted) and are never shown.
 When a call is REFUSED, tell the user the reason in plain words. Don't try to work around it.`;
 
@@ -44,7 +45,9 @@ function toResult(o: ReadOutcome): ToolResult {
     };
   }
   const lines = [
-    `${o.records.length} record(s) for ${o.personName}.`,
+    o.patientName
+      ? `${o.records.length} record(s) for ${o.patientName}, the patient ${o.personName} has open.`
+      : `${o.records.length} record(s) for ${o.personName}.`,
     JSON.stringify(o.records, null, 1),
   ];
   if (o.withheld.count > 0) {

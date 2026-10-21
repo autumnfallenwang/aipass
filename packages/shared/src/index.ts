@@ -79,6 +79,24 @@ export type AgentStatus = z.infer<typeof AgentStatus>;
 export const GrantStatus = z.enum(["active", "revoked"]);
 export type GrantStatus = z.infer<typeof GrantStatus>;
 
+/** A person the clinic has paused (S9): every AI acting for them is refused. */
+export const PersonStatus = z.enum(["active", "suspended"]);
+export type PersonStatus = z.infer<typeof PersonStatus>;
+
+/** Who gave a grant (D19): the person, or the admin (test persons only). */
+export const GrantSetBy = z.enum(["person", "admin"]);
+export type GrantSetBy = z.infer<typeof GrantSetBy>;
+
+const TITLE = /^(dr|prof|mr|mrs|ms|mx)\.?$/i;
+
+/** The name a sentence uses: the first name, or a title and surname ("Dr. Lee"). */
+export function firstName(displayName: string): string {
+  const words = displayName.trim().split(/\s+/);
+  const [first] = words;
+  if (!first) return displayName;
+  return words.length > 1 && TITLE.test(first) ? `${first} ${words.at(-1)}` : first;
+}
+
 /**
  * Security labels that are always refused, whatever a role says.
  * Matched on `meta.security` (system + code).

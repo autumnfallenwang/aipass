@@ -16,17 +16,19 @@ export async function ensureLogin(
   who: { email: string; password: string },
 ) {
   await page.getByRole("link", { name: "People" }).click();
-  const card = page.locator(`[data-person="${personId}"]`);
-  await expect(
-    card.getByText("Has a login").or(card.getByRole("button", { name: "Give a login" })),
-  ).toBeVisible();
-  if (await card.getByRole("button", { name: "Give a login" }).isVisible()) {
-    await card.getByRole("button", { name: "Give a login" }).click();
-    await page.getByLabel("Email").fill(who.email);
-    await page.getByLabel("Temporary password").fill(who.password);
-    await page.getByRole("button", { name: "Create login" }).click();
+  await page.goto(`/admin/people?person=${personId}`);
+  const panel = page.getByTestId("person-panel");
+  await panel.getByRole("tab", { name: "Login" }).click();
+  const has = panel.getByTestId("login-info");
+  const create = panel.getByRole("button", { name: "Create login" });
+  await expect(has.or(create)).toBeVisible();
+  if (await create.isVisible()) {
+    await panel.getByLabel("Email").fill(who.email);
+    await panel.getByLabel("Temporary password").fill(who.password);
+    await create.click();
   }
-  await expect(card.getByText("Has a login")).toBeVisible();
+  await expect(has).toBeVisible();
+  await page.keyboard.press("Escape");
 }
 
 /** Signs the admin in, creating the account first on a fresh install. */

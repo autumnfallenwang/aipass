@@ -3,11 +3,11 @@ import { aipassTarget, runChecks } from "@aipass/check";
 import {
   agentClients,
   agents,
+  CHAT_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
   type Db,
   fhirServers,
-  grants,
-  newId,
+  modelConnections,
   oauthClient,
   persons,
   receipts,
@@ -21,7 +21,6 @@ import {
   agentUrl,
   GROUPS,
   PatientField,
-  Permission,
   RoleRule,
   rulesToPermissions,
 } from "@aipass/shared";
@@ -35,7 +34,9 @@ import { config, passIssuer } from "./config.ts";
 import { adminConnectionRoutes } from "./connections.ts";
 import { adminFhirServerRoutes } from "./fhir-servers.ts";
 import { activeKey, PASS_ALG } from "./keys.ts";
+import { adminModelRoutes } from "./models.ts";
 import { allowClient, disallowClient, syncAgentResource } from "./oauth.ts";
+import { adminPeopleRoutes } from "./people.ts";
 
 type AdminEnv = { Variables: { adminId: string } };
 
@@ -64,7 +65,11 @@ const RoleBody = z.strictObject({
     message: "each group appears once",
   }),
   patientFields: z.array(PatientField).refine((f) => new Set(f).size === f.length),
+  /** Its agents may only use models that keep data on the network (S8). */
+  networkModelsOnly: z.boolean().optional(),
 });
+
+const ModelId = z.string().trim().min(1).max(200);
 
 const AgentBody = z.strictObject({
   name: z.string().trim().min(1).max(80),
@@ -74,23 +79,27 @@ const AgentBody = z.strictObject({
   fhirServerId: z.string().min(1).nullable().optional(),
   /** Let Claude Code connect as this agent straight away. */
   allowClaudeCode: z.boolean().optional(),
+  /** Let the built-in chat connect as this agent straight away (S8). */
+  allowChat: z.boolean().optional(),
+  /** The model the built-in chat uses for it, and a fallback (S8). */
+  modelConnectionId: z.string().min(1).nullable().optional(),
+  model: ModelId.nullable().optional(),
+  fallbackConnectionId: z.string().min(1).nullable().optional(),
+  fallbackModel: ModelId.nullable().optional(),
 });
 
 const ClientBody = z.strictObject({ clientId: z.string().trim().min(1).max(500) });
 
-const LoginBody = z.strictObject({
-  email: z.email(),
-  password: z.string().min(10).max(200),
-});
-
-const PersonBody = z.strictObject({
-  displayName: z.string().trim().min(1).max(120),
-  fhirRef: z.string().regex(/^(Patient|Practitioner)\/[A-Za-z0-9\-.]{1,64}$/),
-});
-
-const GrantBody = z.strictObject({ permissions: z.array(Permission) });
-
-export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?: typeof fetch }) {
+export function adminRoutes(deps: {
+  db: Db;
+  auth: Auth;
+  fhir: FhirClient;
+  fetch?: typeof fetch;
+  /** How the api reaches model endpoints (tests pass a fake). */
+  modelFetch?: typeof fetch;
+  /** Re-reads aipass's registered FHIR server now (after an edit). */
+  onFhirServerChanged?: () => Promise<void>;
+}) {
   const { db, auth, fhir } = deps;
   const doFetch = deps.fetch ?? fetch;
   const app = new Hono<AdminEnv>();
@@ -114,6 +123,47 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
       .from(fhirServers)
       .where(eq(fhirServers.id, id));
     return Boolean(hit);
+  }
+
+  /** aipass's own server is every agent's default, stored as no server (null). */
+  async function asServerChoice(id: string | null | undefined) {
+    if (!id) return id;
+    const [s] = await db
+      .select({ kind: fhirServers.kind })
+      .from(fhirServers)
+      .where(eq(fhirServers.id, id));
+    return s?.kind === "aipass" ? null : id;
+  }
+
+  /**
+   * An agent's model settings make sense: each connection exists and has a
+   * model chosen, and a role that keeps data on the network gets only models
+   * that do (S8). The chat checks this again on every message.
+   */
+  async function checkModels(a: {
+    roleId: string;
+    modelConnectionId?: string | null;
+    model?: string | null;
+    fallbackConnectionId?: string | null;
+    fallbackModel?: string | null;
+  }): Promise<string | null> {
+    const [role] = await db.select().from(roles).where(eq(roles.id, a.roleId));
+    for (const [connId, model, what] of [
+      [a.modelConnectionId, a.model, "model"],
+      [a.fallbackConnectionId, a.fallbackModel, "fallback model"],
+    ] as const) {
+      if (!connId) continue;
+      const [conn] = await db
+        .select()
+        .from(modelConnections)
+        .where(eq(modelConnections.id, connId));
+      if (!conn) return `no such model connection: ${connId}`;
+      if (!model) return `choose which ${what} to use from ${conn.name}`;
+      if (role?.networkModelsOnly && conn.dataLocation !== "network") {
+        return `the ${role.name} role only allows models that keep data on the clinic's network, and ${conn.name} sends it to a cloud provider`;
+      }
+    }
+    return null;
   }
 
   async function listAgents() {
@@ -150,7 +200,9 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
       const [hit] = await db.select({ id: agents.id }).from(agents).where(eq(agents.id, x));
       return Boolean(hit);
     });
-    const { allowClaudeCode, ...fields } = body.data;
+    const { allowClaudeCode, allowChat, ...fields } = body.data;
+    const modelProblem = await checkModels({ ...fields, roleId: role.id });
+    if (modelProblem) return c.json({ error: modelProblem }, 400);
     const [agent] = await db
       .insert(agents)
       .values({
@@ -160,6 +212,10 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
         roleId: role.id,
         status: "active",
         fhirDeviceId: agentDeviceId(id),
+        modelConnectionId: fields.modelConnectionId ?? null,
+        model: fields.model ?? null,
+        fallbackConnectionId: fields.fallbackConnectionId ?? null,
+        fallbackModel: fields.fallbackModel ?? null,
         createdBy: c.get("adminId"),
       })
       .returning();
@@ -178,17 +234,28 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
     // The agent's gateway URL becomes an OAuth resource AI apps can ask tokens for.
     await syncAgentResource(db, { id, name: fields.name });
     if (allowClaudeCode) await allowClient(db, id, CLAUDE_CODE_CLIENT_ID);
+    if (allowChat) await allowClient(db, id, CHAT_CLIENT_ID);
     return c.json({ ...agent, mcpUrl: agentUrl(config.gatewayUrl, id) }, 201);
   });
 
   app.patch("/agents/:id", async (c) => {
-    const body = AgentBody.omit({ allowClaudeCode: true })
+    const body = AgentBody.omit({ allowClaudeCode: true, allowChat: true })
       .partial()
       .safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
     if (body.data.roleId) {
       const [role] = await db.select().from(roles).where(eq(roles.id, body.data.roleId));
       if (!role) return c.json({ error: "no such role" }, 400);
+    }
+    const [current] = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, c.req.param("id")));
+    if (!current) return c.json({ error: "no such agent" }, 404);
+    const modelProblem = await checkModels({ ...current, ...body.data });
+    if (modelProblem) return c.json({ error: modelProblem }, 400);
+    if (body.data.fhirServerId !== undefined) {
+      body.data.fhirServerId = await asServerChoice(body.data.fhirServerId);
     }
     if (body.data.fhirServerId && !(await serverExists(body.data.fhirServerId))) {
       return c.json({ error: "no such FHIR server" }, 400);
@@ -353,98 +420,9 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
 
   // ---------- people and their grants ----------
 
-  app.get("/persons", async (c) => {
-    const ps = await db.select().from(persons).orderBy(persons.displayName);
-    const gs = await db
-      .select({ grant: grants, agentName: agents.name })
-      .from(grants)
-      .innerJoin(agents, eq(grants.agentId, agents.id));
-    return c.json(
-      ps.map((p) => ({
-        ...p,
-        grants: gs
-          .filter((g) => g.grant.personId === p.id)
-          .map((g) => ({ ...g.grant, agentName: g.agentName })),
-      })),
-    );
-  });
+  // ---------- people (S9): see people.ts ----------
 
-  app.post("/persons", async (c) => {
-    const body = PersonBody.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
-    const id = await uniqueId(slugify(body.data.displayName), async (x) => {
-      const [hit] = await db.select({ id: persons.id }).from(persons).where(eq(persons.id, x));
-      return Boolean(hit);
-    });
-    const [person] = await db
-      .insert(persons)
-      .values({ id, ...body.data })
-      .returning();
-    return c.json(person, 201);
-  });
-
-  // Gives a test person a login, so they can consent and see "My AIs".
-  app.post("/persons/:id/login", async (c) => {
-    const body = LoginBody.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: "expected {email, password (10+ characters)}" }, 400);
-    const [person] = await db
-      .select()
-      .from(persons)
-      .where(eq(persons.id, c.req.param("id")));
-    if (!person) return c.json({ error: "no such person" }, 404);
-    if (person.userId) return c.json({ error: "this person already has a login" }, 409);
-    try {
-      const { user } = await auth.api.signUpEmail({
-        body: { name: person.displayName, email: body.data.email, password: body.data.password },
-      });
-      await db.update(persons).set({ userId: user.id }).where(eq(persons.id, person.id));
-      return c.json({ personId: person.id, email: body.data.email }, 201);
-    } catch (err) {
-      return c.json({ error: (err as Error).message }, 400);
-    }
-  });
-
-  app.put("/persons/:id/grants/:agentId", async (c) => {
-    const body = GrantBody.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
-    const personId = c.req.param("id");
-    const agentId = c.req.param("agentId");
-    const [grant] = await db
-      .insert(grants)
-      .values({
-        id: newId("grt"),
-        personId,
-        agentId,
-        permissions: body.data.permissions,
-        status: "active",
-      })
-      .onConflictDoUpdate({
-        target: [grants.personId, grants.agentId],
-        set: { permissions: body.data.permissions, status: "active", revokedAt: null },
-      })
-      .returning()
-      .catch(() => []);
-    if (!grant) return c.json({ error: "no such person or agent" }, 404);
-    return c.json(grant);
-  });
-
-  for (const verb of ["revoke", "restore"] as const) {
-    app.post(`/persons/:id/grants/:agentId/${verb}`, async (c) => {
-      const [grant] = await db
-        .update(grants)
-        .set(
-          verb === "revoke"
-            ? { status: "revoked", revokedAt: new Date() }
-            : { status: "active", revokedAt: null },
-        )
-        .where(
-          and(eq(grants.personId, c.req.param("id")), eq(grants.agentId, c.req.param("agentId"))),
-        )
-        .returning();
-      if (!grant) return c.json({ error: "no such grant" }, 404);
-      return c.json(grant);
-    });
-  }
+  app.route("/", adminPeopleRoutes({ db, auth, fhir }));
 
   // ---------- activity ----------
 
@@ -459,17 +437,19 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
     if (q.before) where.push(lt(receipts.seq, Number(q.before)));
     const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
     const rows = await db
-      .select()
+      .select({ receipt: receipts, clientName: oauthClient.name })
       .from(receipts)
+      .leftJoin(oauthClient, eq(receipts.clientId, oauthClient.clientId))
       .where(where.length ? and(...where) : sql`true`)
       .orderBy(desc(receipts.seq))
       .limit(limit);
     return c.json({
-      items: rows.map((r) => ({
+      items: rows.map(({ receipt: r, clientName }) => ({
         ...r,
-        auditEventUrl: r.auditEventId ? `${config.fhirBaseUrl}/AuditEvent/${r.auditEventId}` : null,
+        clientName: r.clientId ? (clientName ?? r.clientId) : null,
+        auditEventUrl: r.auditEventId ? `${fhir.baseUrl}/AuditEvent/${r.auditEventId}` : null,
       })),
-      nextBefore: rows.length === limit ? rows[rows.length - 1]?.seq : null,
+      nextBefore: rows.length === limit ? rows[rows.length - 1]?.receipt.seq : null,
     });
   });
 
@@ -502,7 +482,15 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
 
   app.route("/", adminApprovalRoutes({ db }));
   app.route("/", adminConnectionRoutes({ db, auth, fetch: deps.fetch }));
-  app.route("/", adminFhirServerRoutes({ db, fetch: deps.fetch }));
+  app.route(
+    "/",
+    adminFhirServerRoutes({
+      db,
+      fetch: deps.fetch,
+      onAipassServerChanged: deps.onFhirServerChanged,
+    }),
+  );
+  app.route("/", adminModelRoutes({ db, fetch: deps.modelFetch }));
 
   // ---------- health check (S4) ----------
 
@@ -530,8 +518,9 @@ export function adminRoutes(deps: { db: Db; auth: Auth; fhir: FhirClient; fetch?
           db,
           gatewayUrl: config.gatewayUrl,
           passIssuer: passIssuer(),
-          fhirBaseUrl: config.fhirBaseUrl,
-          fhirHeaders: config.fhirHeaders,
+          // aipass's own FHIR server as registered (D18), where the audit log is
+          fhirBaseUrl: fhir.baseUrl,
+          fhirHeaders: fhir.credentialHeaders(),
           // the approval endpoints live on this api; no need to go through the web app
           publicUrl: config.apiUrl,
           // passes still name the public gateway URL; the calls may go another way

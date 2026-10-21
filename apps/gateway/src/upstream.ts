@@ -1,6 +1,12 @@
-import { type Db, fhirServers, seal, unseal, vault } from "@aipass/db";
-import { FhirClient, refreshTokens, type SmartTokens } from "@aipass/fhir";
-import { type Refuse, refuse } from "@aipass/policy";
+import { asSmart, type Db, fhirServers, type SmartServer, seal, unseal, vault } from "@aipass/db";
+import {
+  type CarePatient,
+  careTeamOf,
+  FhirClient,
+  refreshTokens,
+  type SmartTokens,
+} from "@aipass/fhir";
+import { firstName, type Refuse, refuse } from "@aipass/policy";
 import { and, eq } from "drizzle-orm";
 
 /** Where one call's records come from, and which patient they must belong to. */
@@ -41,14 +47,35 @@ export class Upstreams {
     },
   ) {}
 
+  /**
+   * Is this patient in the staff member's care (S10, D21)? Asked of aipass's
+   * own FHIR server on every call; the patient's details if so. Throws when
+   * the server doesn't answer, so the caller refuses (fail closed).
+   */
+  async inCare(practitionerRef: string, patientRef: string): Promise<CarePatient | null> {
+    const found = await careTeamOf(this.deps.home, practitionerRef, patientRef);
+    return found.find((p) => p.ref === patientRef) ?? null;
+  }
+
   async target(
     serverId: string | null | undefined,
     person: { id: string; name: string },
     homePatientRef: string,
+    opts: { staff?: boolean } = {},
   ): Promise<Target | Refuse> {
     if (!serverId) return { fhir: this.deps.home, patientRef: homePatientRef };
     const { db } = this.deps;
-    const [server] = await db.select().from(fhirServers).where(eq(fhirServers.id, serverId));
+    const [row] = await db.select().from(fhirServers).where(eq(fhirServers.id, serverId));
+    if (row?.kind === "aipass") return { fhir: this.deps.home, patientRef: homePatientRef };
+    // A staff member's care team is at aipass's own server; at an EHR they'd need its own sign-in.
+    if (opts.staff) {
+      return refuse(
+        4,
+        "not_connected",
+        "a staff member's records come from aipass's own FHIR server only, for now",
+      );
+    }
+    const server = asSmart(row);
     if (!server?.enabled) {
       return refuse(
         0,
@@ -56,7 +83,7 @@ export class Upstreams {
         "the record server is switched off, so nothing was released",
       );
     }
-    const first = person.name.split(" ")[0];
+    const first = firstName(person.name);
     const [entry] = await db
       .select()
       .from(vault)
@@ -104,7 +131,7 @@ export class Upstreams {
   }
 
   private async refresh(
-    server: typeof fhirServers.$inferSelect,
+    server: SmartServer,
     personId: string,
     old: StoredTokens,
     bind: string,

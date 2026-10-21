@@ -22,6 +22,8 @@ type Approval = {
   id: string;
   agentName: string;
   forPerson: string;
+  /** Whose record it goes into, when a staff member's AI proposed it (S10). */
+  patient: string | null;
   approver: string;
   isApprover: boolean;
   hasPasskey: boolean;
@@ -93,7 +95,9 @@ export default function ApprovePage() {
       <Card className="w-full max-w-md" data-status={x.status}>
         <CardHeader>
           <CardDescription>
-            {x.agentName} wants to add this to {x.forPerson}&apos;s record:
+            {x.patient
+              ? `${x.agentName} wants to add this to ${x.patient}'s record, for ${x.forPerson}:`
+              : `${x.agentName} wants to add this to ${x.forPerson}'s record:`}
           </CardDescription>
           <CardTitle className="text-xl" data-testid="approval-summary">
             {x.summary}
@@ -134,6 +138,13 @@ export default function ApprovePage() {
           </p>
           {!x.isApprover && <p className="text-destructive">Only {x.approver} can approve this.</p>}
         </CardContent>
+        {!pending && (
+          <CardFooter className="flex justify-end">
+            <Button variant="outline" onClick={() => router.back()}>
+              Back
+            </Button>
+          </CardFooter>
+        )}
         {pending && x.isApprover && (
           <CardFooter className="flex justify-end gap-2">
             <Button variant="outline" onClick={deny} disabled={busy}>

@@ -1,18 +1,27 @@
 "use client";
 
 import type { Permission } from "@aipass/shared";
-import { Ban, Hospital, KeyRound, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
+import {
+  Ban,
+  Hospital,
+  KeyRound,
+  LogOut,
+  MessageCircle,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { OpenPatient } from "@/components/open-patient";
 import { timeAgo } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { api, useApi } from "@/lib/api";
+import { api, type OpenPatientRef, useApi } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { permissionSentence } from "@/lib/words";
 
@@ -28,9 +37,11 @@ type MyAi = {
   lastActivity: string | null;
   revokedAt: string | null;
   recent: { ts: string; decision: "allow" | "refuse"; sentence: string }[];
+  /** The patient a staff member has open with it (S10). */
+  openPatient: OpenPatientRef | null;
 };
 
-function AiCard({ ai, onChange }: { ai: MyAi; onChange: () => void }) {
+function AiCard({ ai, staff, onChange }: { ai: MyAi; staff: boolean; onChange: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const active = ai.grantStatus === "active";
 
@@ -93,6 +104,9 @@ function AiCard({ ai, onChange }: { ai: MyAi; onChange: () => void }) {
             Your clinic has stopped this AI for everyone.
           </p>
         )}
+        {staff && active && (
+          <OpenPatient agentId={ai.agentId} current={ai.openPatient} onChanged={onChange} />
+        )}
         <div className="grid gap-1">
           <p className="text-sm font-medium">
             Recent requests{" "}
@@ -112,6 +126,13 @@ function AiCard({ ai, onChange }: { ai: MyAi; onChange: () => void }) {
             </p>
           ))}
         </div>
+        {active && ai.agentStatus === "active" && (
+          <Button variant="outline" className="justify-self-start" asChild>
+            <Link href={`/chat/${ai.agentId}`}>
+              <MessageCircle /> Chat with {ai.name}
+            </Link>
+          </Button>
+        )}
         {active &&
           (confirming ? (
             <div className="flex items-center gap-2 rounded-md border border-destructive/30 p-3 text-sm">
@@ -160,6 +181,46 @@ function Approvals() {
           >
             <span className="font-medium">{p.agentName}</span>: {p.summary}
           </Link>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+type Chattable = { agentId: string; name: string; description: string | null; granted: boolean };
+
+/** AIs the clinic lets people chat with here that haven't been allowed yet (S8). */
+function OtherAis() {
+  const list = useApi<Chattable[]>("/person/chat");
+  const others = (list.data ?? []).filter((a) => !a.granted);
+  if (!others.length) return null;
+  return (
+    <Card data-testid="other-ais">
+      <CardHeader>
+        <CardTitle>More AIs you can chat with</CardTitle>
+        <CardDescription>
+          Your clinic offers these in aipass. Each asks what it may see before it reads anything.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {others.map((a) => (
+          <div
+            key={a.agentId}
+            data-chattable={a.agentId}
+            className="flex items-center justify-between gap-2 rounded-md border p-3 text-sm"
+          >
+            <span>
+              <span className="font-medium">{a.name}</span>
+              {a.description && (
+                <span className="block text-muted-foreground">{a.description}</span>
+              )}
+            </span>
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/chat/${a.agentId}`}>
+                <MessageCircle /> Chat
+              </Link>
+            </Button>
+          </div>
         ))}
       </CardContent>
     </Card>
@@ -225,9 +286,12 @@ function RecordsElsewhere() {
 
 export default function MyAisPage() {
   const router = useRouter();
-  const data = useApi<{ person: { displayName: string } | null; ais: MyAi[] }>("/person/ais", {
-    pollMs: 5000,
-  });
+  const data = useApi<{ person: { displayName: string; staff: boolean } | null; ais: MyAi[] }>(
+    "/person/ais",
+    {
+      pollMs: 5000,
+    },
+  );
 
   useEffect(() => {
     if (data.error?.status === 401) router.replace("/login?next=/my-ais");
@@ -276,8 +340,14 @@ export default function MyAisPage() {
         <p className="text-sm text-muted-foreground">No AI may act for you yet.</p>
       )}
       {data.data.ais.map((ai) => (
-        <AiCard key={ai.agentId} ai={ai} onChange={data.reload} />
+        <AiCard
+          key={ai.agentId}
+          ai={ai}
+          staff={Boolean(data.data?.person?.staff)}
+          onChange={data.reload}
+        />
       ))}
+      <OtherAis />
     </main>
   );
 }

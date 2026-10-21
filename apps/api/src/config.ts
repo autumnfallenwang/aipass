@@ -12,6 +12,8 @@ function url(name: string, fallback: string): string {
 export const config = {
   port: Number(process.env.API_PORT ?? 3001),
   apiUrl: url("API_URL", "http://localhost:3001"),
+  /** How the api reaches itself (the built-in chat's token requests): its own port, on loopback. */
+  selfUrl: url("API_SELF_URL", `http://127.0.0.1:${process.env.API_PORT ?? 3001}`),
   gatewayUrl: url("GATEWAY_URL", "http://localhost:3002"),
   /** How the api itself reaches the gateway (the health check), when that isn't GATEWAY_URL: e.g. inside a container network. */
   gatewayInternalUrl: url(

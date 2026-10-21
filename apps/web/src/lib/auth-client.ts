@@ -21,12 +21,15 @@ export function inOAuthFlow(): boolean {
   return q.has("client_id") && q.has("sig");
 }
 
-/** Follows the `{redirect, url}` Better Auth answers with mid-flow. Returns true if it navigated. */
+/**
+ * Follows the `{redirect, url}` Better Auth answers with mid-flow. Returns true
+ * if the browser is on its way. Better Auth's client already navigates for
+ * `redirect: true`; navigating again sent the browser to the same URL twice,
+ * which spends a one-time authorization code twice.
+ */
 export function followRedirect(data: unknown): boolean {
   const d = data as { redirect?: boolean; url?: string } | null;
-  if (d?.url && (d.redirect ?? true)) {
-    window.location.href = d.url;
-    return true;
-  }
-  return false;
+  if (!d?.url || d.redirect === false) return false;
+  if (d.redirect !== true) window.location.href = d.url;
+  return true;
 }

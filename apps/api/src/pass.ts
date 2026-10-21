@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { agents, type Db, persons } from "@aipass/db";
+import { agents, type Db, passPatientOf, persons } from "@aipass/db";
 import { agentUrl, PASS_MAX_SECONDS } from "@aipass/shared";
 import { eq } from "drizzle-orm";
 import { SignJWT } from "jose";
@@ -8,15 +8,10 @@ import { activeKey, PASS_ALG } from "./keys.ts";
 
 export class PassError extends Error {}
 
-/** `Patient/maria` → `maria`. Practitioners carry no patient pin. */
-export function patientIdOf(fhirRef: string): string | undefined {
-  const m = fhirRef.match(/^Patient\/(.+)$/);
-  return m?.[1];
-}
-
 /**
- * Mints a pass: a short-lived JWT naming the person (`sub`) and the agent
- * (`act.sub`), whose audience is that agent's own gateway URL.
+ * Mints a pass: a short-lived JWT naming the person (`sub`), the agent
+ * (`act.sub`) and the patient (`patient`), whose audience is that agent's own
+ * gateway URL.
  */
 export async function mintPass(
   db: Db,
@@ -32,7 +27,8 @@ export async function mintPass(
   const { kid, key } = await activeKey(db);
   const jti = randomUUID();
   const now = Math.floor(Date.now() / 1000);
-  const patient = patientIdOf(person.fhirRef);
+  // A patient's own record, or the patient a staff member has open (S10).
+  const patient = await passPatientOf(db, person, agent.id);
   const token = await new SignJWT({
     ...opts.extra,
     act: { sub: agent.id },
