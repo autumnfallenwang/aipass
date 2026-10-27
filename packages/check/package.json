@@ -16,9 +16,9 @@
   "dependencies": {
     "@aipass/db": "workspace:*",
     "@aipass/shared": "workspace:*",
-    "@modelcontextprotocol/client": "^2.3.1",
+    "@modelcontextprotocol/client": "^2.4.0",
     "drizzle-orm": "^0.45.4",
-    "jose": "^6.2.12"
+    "jose": "^6.2.13"
   },
   "devDependencies": {
     "@aipass/fhir": "workspace:*",
