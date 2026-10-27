@@ -22,19 +22,19 @@
     "zod": "^4.6.7",
     "@aipass/db": "workspace:*",
     "@aipass/fhir": "workspace:*",
-    "jose": "^6.2.12",
+    "jose": "^6.2.13",
     "drizzle-orm": "^0.45.4",
-    "better-auth": "1.7.11",
-    "@better-auth/passkey": "1.7.11",
-    "@better-auth/oauth-provider": "1.7.11",
-    "@better-auth/cimd": "1.7.11",
+    "better-auth": "1.7.12",
+    "@better-auth/passkey": "1.7.12",
+    "@better-auth/oauth-provider": "1.7.12",
+    "@better-auth/cimd": "1.7.12",
     "@aipass/check": "workspace:*",
     "@simplewebauthn/server": "^14.0.3",
     "@aipass/policy": "workspace:*",
-    "@better-auth/sso": "1.7.11"
+    "@better-auth/sso": "1.7.12"
   },
   "devDependencies": {
-    "auth": "1.7.11",
+    "auth": "1.7.12",
     "postgres": "^3.4.9"
   },
   "exports": {

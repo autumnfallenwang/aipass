@@ -20,12 +20,12 @@
     "@aipass/db": "workspace:*",
     "@aipass/fhir": "workspace:*",
     "@aipass/policy": "workspace:*",
-    "@modelcontextprotocol/server": "^2.3.1",
-    "jose": "^6.2.12"
+    "@modelcontextprotocol/server": "^2.4.0",
+    "jose": "^6.2.13"
   },
   "devDependencies": {
     "@aipass/chat": "workspace:*",
-    "@modelcontextprotocol/client": "^2.3.1",
+    "@modelcontextprotocol/client": "^2.4.0",
     "postgres": "^3.4.9"
   },
   "exports": {
