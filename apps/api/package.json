@@ -18,23 +18,23 @@
     "@aipass/chat": "workspace:*",
     "@aipass/shared": "workspace:*",
     "@hono/node-server": "^2.1.5",
-    "hono": "^4.13.13",
+    "hono": "^4.13.14",
     "zod": "^4.6.7",
     "@aipass/db": "workspace:*",
     "@aipass/fhir": "workspace:*",
-    "jose": "^6.2.12",
+    "jose": "^6.2.14",
     "drizzle-orm": "^0.45.4",
-    "better-auth": "1.7.11",
-    "@better-auth/passkey": "1.7.11",
-    "@better-auth/oauth-provider": "1.7.11",
-    "@better-auth/cimd": "1.7.11",
+    "better-auth": "1.7.14",
+    "@better-auth/passkey": "1.7.14",
+    "@better-auth/oauth-provider": "1.7.14",
+    "@better-auth/cimd": "1.7.14",
     "@aipass/check": "workspace:*",
     "@simplewebauthn/server": "^14.0.3",
     "@aipass/policy": "workspace:*",
-    "@better-auth/sso": "1.7.11"
+    "@better-auth/sso": "1.7.14"
   },
   "devDependencies": {
-    "auth": "1.7.11",
+    "auth": "1.7.14",
     "postgres": "^3.4.9"
   },
   "exports": {
